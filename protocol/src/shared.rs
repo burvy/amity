@@ -7,13 +7,13 @@ use bevy::prelude::*;
 use crate::protocol;
 
 /// Shared walkspeed to ensure similar simulation between client and server
-pub const WALKSPEED: f32 = 1.3;
+pub const WALKSPEED: f32 = 3.0;
 /// Shared sprint speed multiplier
-pub const SPRINT_MUL: f32 = 3.5;
+pub const SPRINT_MUL: f32 = 1.5;
 // TODO: add grounded check
 
 /// Shared jump velocity to ensure client-server similarity
-pub const JUMP_VEL: f32 = 3.5;
+pub const JUMP_VEL: f32 = 4.0;
 
 /// Shared player radius for simulation similarity
 pub const PLAYER_RADIUS: f32 = 0.45;
@@ -69,23 +69,25 @@ pub fn apply_input(
     input: &protocol::PlayerInputs,
     grounded: bool, // grounded must be defined by user: `!hits.is_empty()`
 ) {
-    // `PlayerInputs` is responsible for declaring which is forward
-    let motion = input.motion.clamp_length_max(1.0)
-        * WALKSPEED
-        * if input.sprint { SPRINT_MUL } else { 1.0 };
-
     // direction player is looking
     let look_x = Quat::from_rotation_y(input.look.x);
     // TODO: Allow the camera to look around, but only rotate the body on yaw
     *rotation = Rotation(look_x);
 
     // quaternion operates on unit vector to rotate it
-    let vel_all = look_x * Vec3::new(motion.x, 0.0, motion.y);
-    velocity.0.x = vel_all.x;
-    velocity.0.z = vel_all.z;
+    if grounded {
+        // `PlayerInputs` is responsible for declaring which is forward
+        let motion = input.motion.clamp_length_max(1.0)
+            * WALKSPEED
+            * if input.sprint { SPRINT_MUL } else { 1.0 };
+        let vel_all = look_x * Vec3::new(motion.x, 0.0, motion.y);
+        velocity.0.x = vel_all.x;
+        velocity.0.z = vel_all.z;
+
+        if input.jump {
+            velocity.0.y = JUMP_VEL
+        }
+    }
 
     // allow jumping
-    if input.jump && grounded {
-        velocity.0.y = JUMP_VEL
-    }
 }
