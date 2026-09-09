@@ -36,6 +36,6 @@ impl Plugin for MainPlugin {
         app.add_plugins(player::PlayerPlugin);
         app.add_plugins(world::WorldPlugin);
         app.add_plugins(net::NetPlugin);
-        app.add_plugins(burvy_protocol::protocol::ProtocolPlugin);
+        app.add_plugins(shooter_protocol::protocol::ProtocolPlugin);
     }
 }

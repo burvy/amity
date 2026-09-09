@@ -2,7 +2,7 @@
 members = ["protocol", "server"]
 
 [package]
-name = "burvy-game"
+name = "shooter"
 version = "0.1.0"
 edition = "2024"
 
@@ -23,7 +23,7 @@ lightyear = { version = "0.28.0", default-features = false, features = [
     "input_native",
     "avian3d",
 ]}
-burvy-protocol = { path = "protocol"} # protocol shared with server (client is root)
+shooter-protocol = { path = "protocol"} # protocol shared with server (client is root)
 # Set max log levels. This helps avoid unwanted low-severity log spam, which can affect performance.
 log = { version = "0.4", features = [
     "max_level_debug",

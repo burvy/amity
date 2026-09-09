@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin};
-use burvy_protocol::protocol;
+use shooter_protocol::protocol;
 mod server;
 
 fn main() {

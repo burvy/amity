@@ -4,7 +4,7 @@ use avian3d::dynamics::rigid_body::LinearVelocity;
 use avian3d::physics_transform::{Position, Rotation};
 use avian3d::spatial_query::ShapeHits;
 use bevy::prelude::*;
-use burvy_protocol::{protocol, shared, world};
+use shooter_protocol::{protocol, shared, world};
 use lightyear::input::server::{authorize_controlled_targets, InputValidationAppExt};
 use lightyear::prelude::input::native::{ActionState, NativeStateSequence};
 use lightyear::prelude::server::ServerPlugins;

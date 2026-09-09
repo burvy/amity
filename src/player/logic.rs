@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
-use burvy_protocol::shared;
+use shooter_protocol::shared;
 use lightyear::prelude::*;
 
 use crate::player::definition;

@@ -11,7 +11,7 @@ use avian3d::{
     dynamics::rigid_body::LinearVelocity, physics_transform::Rotation, spatial_query::ShapeHits,
 };
 use bevy::prelude::*;
-use burvy_protocol::{protocol, shared};
+use shooter_protocol::{protocol, shared};
 use lightyear::{
     input::client::InputSystems,
     netcode::{client_plugin::NetcodeConfig, Key, NetcodeClient},

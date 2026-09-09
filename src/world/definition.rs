@@ -1,7 +1,7 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
-use burvy_protocol::world::{
+use shooter_protocol::world::{
     self,
     definition::{BASEPLATE_LENGTH, BASEPLATE_THICKNESS},
 };
