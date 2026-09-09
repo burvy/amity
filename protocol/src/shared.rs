@@ -10,7 +10,6 @@ use crate::protocol;
 pub const WALKSPEED: f32 = 3.0;
 /// Shared sprint speed multiplier
 pub const SPRINT_MUL: f32 = 1.5;
-// TODO: add grounded check
 
 /// Shared jump velocity to ensure client-server similarity
 pub const JUMP_VEL: f32 = 4.0;
@@ -74,20 +73,18 @@ pub fn apply_input(
     // TODO: Allow the camera to look around, but only rotate the body on yaw
     *rotation = Rotation(look_x);
 
-    // quaternion operates on unit vector to rotate it
     if grounded {
         // `PlayerInputs` is responsible for declaring which is forward
         let motion = input.motion.clamp_length_max(1.0)
             * WALKSPEED
             * if input.sprint { SPRINT_MUL } else { 1.0 };
+        // quaternion operates on unit vector to rotate it
         let vel_all = look_x * Vec3::new(motion.x, 0.0, motion.y);
         velocity.0.x = vel_all.x;
         velocity.0.z = vel_all.z;
 
         if input.jump {
-            velocity.0.y = JUMP_VEL
+            velocity.0.y = JUMP_VEL;
         }
     }
-
-    // allow jumping
 }
