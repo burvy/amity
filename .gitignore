@@ -1,0 +1,13 @@
+# Rust builds
+/target
+# This file contains environment-specific configuration like linker settings
+.cargo/config.toml
+
+# ---
+# the lock file is committed just in case dependency version changing breaks something
+# ---
+
+# these should never be commited
+*.pem
+*.key
+.env

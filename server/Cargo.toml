@@ -1,0 +1,31 @@
+[package]
+name = "burvy-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# protocol is headless, we dont want the bevy rendering/window system, its useless here
+avian3d = { version = "0.7.0", default-features = false, features = [
+    "3d",
+    "f32",
+    "parry-f32",
+    "serialize",
+    # debug plugin is left out as it drags in the renderer
+]}
+bevy = { version = "0.19.0", default-features = false, features = [
+    "std",
+    "bevy_log",
+    "multi_threaded",
+]}
+lightyear = { version = "0.28.0", default-features = false, features = [
+    "std",
+    "server",
+    "netcode",
+    "webtransport",
+    "replication",
+    "prediction",
+    "interpolation",
+]}
+tokio = { version = "1.53.1", features = ["rt"] }
+# serde is not required as serialization happens in burvy-protocol
+burvy-protocol = { path = "../protocol"} # protocol shared with client
