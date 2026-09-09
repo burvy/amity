@@ -204,15 +204,20 @@ fn server_interact(
     >,
 ) {
     for (player, position, action) in &players {
+        if !action.0.interact {
+            continue; // skip if not interacting
+        }
+        // interaction
         let rot = Quat::from_euler(EulerRot::YXZ, action.0.look.x, action.0.look.y, 0.0);
         let Ok(dir) = Dir3::new(rot * Vec3::NEG_Z) else {
             continue;
         };
 
-        let origin = position.0 + shared::EYE_HEIGHT;
+        let origin = position.0 + Vec3::Y * shared::EYE_HEIGHT;
         let filter = SpatialQueryFilter::from_excluded_entities([player]);
 
         if let Some(hit) = spatial.cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter) {
+            // logic to run upon interaction
             info!(
                 "{} interacted with {} at distance {}",
                 player, hit.entity, hit.distance
