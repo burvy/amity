@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use avian3d::dynamics::rigid_body::LinearVelocity;
 use avian3d::physics_transform::{Position, Rotation};
-use avian3d::spatial_query::ShapeHits;
+use avian3d::spatial_query::{ShapeHits, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
 use lightyear::input::input_buffer::InputBuffer;
 use lightyear::input::server::{authorize_controlled_targets, InputValidationAppExt};
@@ -48,7 +48,7 @@ impl Plugin for ServerPlugin {
 
         app.add_systems(
             FixedUpdate,
-            (clear_stale_input, server_player_motion).chain(),
+            (clear_stale_input, server_player_motion, server_interact).chain(),
         );
         app.add_systems(Update, heartbeat);
 
@@ -187,6 +187,36 @@ fn clear_stale_input(
         // catches when players just have lightyear sending their last action while quiet
         if quiet && action.0 != protocol::PlayerInputs::default() {
             action.0 = protocol::PlayerInputs::default();
+        }
+    }
+}
+
+/// Raycasts from a player's eye when they are interacting
+/// Interaction is called for every tick they are interacting
+/// INTERACT_DISTANCE is the max interact distance
+/// It is up to the other systems to handle how fast players are
+/// allowed to interact
+fn server_interact(
+    spatial: SpatialQuery,
+    players: Query<
+        (Entity, &Position, &ActionState<protocol::PlayerInputs>),
+        With<protocol::PlayerMarker>,
+    >,
+) {
+    for (player, position, action) in &players {
+        let rot = Quat::from_euler(EulerRot::YXZ, action.0.look.x, action.0.look.y, 0.0);
+        let Ok(dir) = Dir3::new(rot * Vec3::NEG_Z) else {
+            continue;
+        };
+
+        let origin = position.0 + shared::EYE_HEIGHT;
+        let filter = SpatialQueryFilter::from_excluded_entities([player]);
+
+        if let Some(hit) = spatial.cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter) {
+            info!(
+                "{} interacted with {} at distance {}",
+                player, hit.entity, hit.distance
+            );
         }
     }
 }

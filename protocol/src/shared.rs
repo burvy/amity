@@ -32,6 +32,9 @@ pub const PLAYER_HALF_HEIGHT: f32 = PLAYER_LENGTH / 2.0 + PLAYER_RADIUS;
 /// Distance to the ground to be considered grounded (tweak if needed)
 pub const GROUND_TOLERANCE: f32 = 0.1;
 
+/// Distance to consider interaction
+pub const INTERACT_DISTANCE: f32 = 3.0;
+
 /// Shared player body definition to ensure similar simulation between
 /// client and server
 #[derive(Bundle)]
