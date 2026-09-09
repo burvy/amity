@@ -26,9 +26,9 @@ pub const TIMESTEP: f64 = 1.0 / 64.0;
 /// random open port so that clients on the same machine won't have issues
 /// registering as the same player when they connect to the server.
 pub const SERVER_ADDR: SocketAddr =
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(174, 175, 161, 63)), 5000);
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(174, 175, 161, 63)), 5001);
 
-pub const SERVER_BIND_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 5000);
+pub const SERVER_BIND_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 5001);
 
 pub struct ProtocolPlugin;
 
