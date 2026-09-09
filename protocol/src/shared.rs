@@ -8,6 +8,8 @@ use crate::protocol;
 
 /// Shared walkspeed to ensure similar simulation between client and server
 pub const WALKSPEED: f32 = 1.3;
+/// Shared sprint speed multiplier
+pub const SPRINT_MUL: f32 = 3.5;
 // TODO: add grounded check
 
 /// Shared jump velocity to ensure client-server similarity
@@ -68,7 +70,9 @@ pub fn apply_input(
     grounded: bool, // grounded must be defined by user: `!hits.is_empty()`
 ) {
     // `PlayerInputs` is responsible for declaring which is forward
-    let motion = input.motion.clamp_length_max(1.0) * WALKSPEED;
+    let motion = input.motion.clamp_length_max(1.0)
+        * WALKSPEED
+        * if input.sprint { SPRINT_MUL } else { 1.0 };
 
     // direction player is looking
     let look_x = Quat::from_rotation_y(input.look.x);

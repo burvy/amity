@@ -90,6 +90,8 @@ pub struct PlayerInputs {
     pub motion: Vec2,
     /// A bool representing whether the player should jump
     pub jump: bool,
+    /// A bool representing whether the player is sprinting
+    pub sprint: bool,
 }
 
 /// `MapEntities` exists to satisfy the `InputPlugin`'s trait bound.

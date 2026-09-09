@@ -173,6 +173,7 @@ fn buffer_input(
         },
         // Hold spacebar to jump repeatedly
         jump: keys.pressed(KeyCode::Space), // TODO: configurable inputs
+        sprint: keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight), // TODO: configurable inputs
     };
 }
 
