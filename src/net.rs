@@ -82,7 +82,10 @@ fn connect(mut cmds: Commands) -> Result {
             PeerAddr(protocol::SERVER_ADDR),
             Link::default(),
             ReplicationReceiver,
-            NetcodeClient::new(auth, NetcodeConfig::default())?,
+            NetcodeClient::new(auth, NetcodeConfig:: {
+                client_timeout_secs: 300, // controls timeout
+                ..default()
+            })?,
             WebTransportClientIo {
                 certificate_digest: String::new(),
             },

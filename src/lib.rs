@@ -17,7 +17,7 @@ pub fn run() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                canvas: Some("#game-canvas".into()),
+                canvas: Some("#shooter-canvas".into()),
                 fit_canvas_to_parent: true,
                 ..default()
             }),
