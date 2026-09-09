@@ -11,7 +11,6 @@ use avian3d::{
     dynamics::rigid_body::LinearVelocity, physics_transform::Rotation, spatial_query::ShapeHits,
 };
 use bevy::prelude::*;
-use shooter_protocol::{protocol, shared};
 use lightyear::{
     input::client::InputSystems,
     netcode::{client_plugin::NetcodeConfig, Key, NetcodeClient},
@@ -22,6 +21,7 @@ use lightyear::{
     },
     webtransport::client::WebTransportClientIo,
 };
+use shooter_protocol::{protocol, shared};
 
 use crate::player;
 
@@ -82,10 +82,13 @@ fn connect(mut cmds: Commands) -> Result {
             PeerAddr(protocol::SERVER_ADDR),
             Link::default(),
             ReplicationReceiver,
-            NetcodeClient::new(auth, NetcodeConfig:: {
-                client_timeout_secs: 300, // controls timeout
-                ..default()
-            })?,
+            NetcodeClient::new(
+                auth,
+                NetcodeConfig {
+                    client_timeout_secs: 300, // controls timeout
+                    ..default()
+                },
+            )?,
             WebTransportClientIo {
                 certificate_digest: String::new(),
             },
@@ -106,11 +109,11 @@ fn add_physics(
     mut cmds: Commands,
     players: Query<Entity, (Added<Predicted>, With<protocol::PlayerMarker>)>,
 ) {
-    players.iter().for_each(|player| {
+    for player in players.iter() {
         cmds.entity(player).insert(
             shared::PlayerBody::default(), // add ONCE
         );
-    });
+    }
 }
 
 /// Insert player model onto player upon being newly predicted
@@ -118,12 +121,12 @@ fn draw_players(
     mut cmds: Commands,
     players: Query<Entity, (Added<Predicted>, With<protocol::PlayerMarker>)>,
 ) {
-    players.iter().for_each(|player| {
+    for player in players.iter() {
         cmds.entity(player).queue_apply_scene(bsn! {
             Mesh3d(asset_value(Capsule3d::new(shared::PLAYER_RADIUS, shared::PLAYER_LENGTH)))
             MeshMaterial3d::<StandardMaterial>(asset_value(Color::WHITE))
         });
-    });
+    }
 }
 
 /*
@@ -188,9 +191,7 @@ fn client_player_motion(
         With<Predicted>,
     >,
 ) {
-    players
-        .iter_mut()
-        .for_each(|(mut rot, mut vel, hits, action)| {
-            shared::apply_input(&mut rot, &mut vel, &action.0, !hits.is_empty());
-        })
+    for (mut rot, mut vel, hits, action) in &mut players {
+        shared::apply_input(&mut rot, &mut vel, &action.0, !hits.is_empty());
+    }
 }

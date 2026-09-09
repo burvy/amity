@@ -4,6 +4,7 @@ use avian3d::dynamics::rigid_body::LinearVelocity;
 use avian3d::physics_transform::{Position, Rotation};
 use avian3d::spatial_query::ShapeHits;
 use bevy::prelude::*;
+use lightyear::input::input_buffer::InputBuffer;
 use lightyear::input::server::{authorize_controlled_targets, InputValidationAppExt};
 use lightyear::prelude::input::native::{ActionState, NativeStateSequence};
 use lightyear::prelude::server::ServerPlugins;
@@ -31,6 +32,10 @@ const KEY_PATH: &str =
 const CERT_PATH: &str =
     r"C:\Users\Burvy\AppData\Local\Posh-ACME\LE_PROD\3716529536\174.175.161.63\fullchain.cer";
 
+// ticks before we stop replaying the client's last action after they stop
+// sending inputs. 128 ticks for 64Hz is 2 seconds.
+const STALE_INPUT_TICKS: i32 = 128;
+
 pub struct ServerPlugin;
 
 impl Plugin for ServerPlugin {
@@ -41,7 +46,10 @@ impl Plugin for ServerPlugin {
         });
         app.add_observer(on_connect);
 
-        app.add_systems(FixedUpdate, server_player_motion);
+        app.add_systems(
+            FixedUpdate,
+            (clear_stale_input, server_player_motion).chain(),
+        );
         app.add_systems(Update, heartbeat);
 
         // this is not default, but prevents clients from controlling
@@ -126,11 +134,9 @@ fn server_player_motion(
         With<protocol::PlayerMarker>,
     >,
 ) {
-    players
-        .iter_mut()
-        .for_each(|(mut rot, mut vel, hits, action)| {
-            shared::apply_input(&mut rot, &mut vel, &action.0, !hits.is_empty());
-        })
+    for (mut rot, mut vel, hits, action) in &mut players {
+        shared::apply_input(&mut rot, &mut vel, &action.0, !hits.is_empty());
+    }
 }
 
 fn heartbeat(
@@ -151,4 +157,33 @@ fn heartbeat(
         senders.iter().count(),
         players.iter().count(),
     )
+}
+
+/// Per `lightyear_inputs/src/server.rs:706`, frozen clients stop sending input but
+/// lightyear replays their last action forever. We have a long timeout, and should
+/// zero the input once they stop sending input.
+/// This function sets input to default if the player has been quiet for STALE_INPUT_TICKS
+/// and they have some queued input from lightyear due to freezing.
+fn clear_stale_input(
+    timeline: Res<LocalTimeline>,
+    mut players: Query<
+        (
+            &mut ActionState<protocol::PlayerInputs>,
+            &InputBuffer<ActionState<protocol::PlayerInputs>, protocol::PlayerInputs>,
+        ),
+        With<protocol::PlayerMarker>,
+    >,
+) {
+    let tick = timeline.tick();
+    for (mut action, buffer) in &mut players {
+        // no input or last input was longer than STALE_INPUT_TICKS
+        let quiet = buffer
+            .last_remote_tick
+            .is_none_or(|last| tick - last > STALE_INPUT_TICKS);
+
+        // catches when players just have lightyear sending their last action while quiet
+        if quiet && action.0 != protocol::PlayerInputs::default() {
+            action.0 = protocol::PlayerInputs::default();
+        }
+    }
 }

@@ -13,7 +13,6 @@ impl Plugin for PlayerPlugin {
         app.insert_resource(definition::PlayerInfo {
             look: Vec2::ZERO,
             paused: true,
-            ..default()
         });
 
         app.add_systems(Startup, definition::spawn_camera);
