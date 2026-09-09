@@ -6,6 +6,14 @@ name = "shooter"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# Native dev only. Skips TLS validation so `cargo run` can connect to the live
+# server without owning its certificate, which turns the test loop from
+# "build wasm, deploy, open browser" into one command.
+# NEVER use this for actual native
+# clients
+dev-insecure = ["lightyear/webtransport_dangerous_configuration"]
+
 [dependencies]
 # rendering/window is required here, the client is not headless
 avian3d = "0.7.0"
