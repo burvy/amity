@@ -1,7 +1,13 @@
 # [GAME-NAME]
 
 To run a quick dev build:
-`cargo run --features dev-insecure`
+`cargo run -p shooter --features dev-local`
+`cargo run -p shooter-server --features dev-local`
+
+When the game is built with dev-local,  
+The client has no TLS validation,  
+The server connects to localhost and self signs without PEM files  
+The protocol points towawrds localhost instead of my server IP
 
 ## Inputs
 Remember that new player inputs must be added in `PlayerInputs` 

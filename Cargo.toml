@@ -12,7 +12,10 @@ edition = "2024"
 # "build wasm, deploy, open browser" into one command.
 # NEVER use this for actual native
 # clients
-dev-insecure = ["lightyear/webtransport_dangerous_configuration"]
+dev-local = [
+    "shooter-protocol/dev-local",
+    "lightyear/webtransport_dangerous_configuration",
+]
 
 [dependencies]
 # rendering/window is required here, the client is not headless

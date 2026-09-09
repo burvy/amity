@@ -3,6 +3,10 @@ name = "shooter-protocol"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# Point the client at a server on this machine instead of the public IP.
+dev-local = []
+
 [dependencies]
 # protocol is headless, we dont want the bevy rendering/window system, its useless here
 avian3d = { version = "0.7.0", default-features = false, features = [

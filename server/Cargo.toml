@@ -3,6 +3,15 @@ name = "shooter-server"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# Offline dev server: self-signed certificate generated at startup, no cert
+# files and no internet. Pair with the client's own dev-local.
+# NEVER ship a build like this
+dev-local = [
+    "shooter-protocol/dev-local",
+    "lightyear/webtransport_self_signed",
+]
+
 [dependencies]
 # protocol is headless, we dont want the bevy rendering/window system, its useless here
 avian3d = { version = "0.7.0", default-features = false, features = [

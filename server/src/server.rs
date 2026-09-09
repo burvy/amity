@@ -27,8 +27,10 @@ use shooter_protocol::{protocol, shared, world};
 //   -Profile shortlived `
 //   -AcceptTOS `
 //   -Contact 'name@email.com(replace with your email)'
+#[cfg(not(feature = "dev-local"))]
 const KEY_PATH: &str =
     r"C:\Users\Burvy\AppData\Local\Posh-ACME\LE_PROD\3716529536\174.175.161.63\cert.key";
+#[cfg(not(feature = "dev-local"))]
 const CERT_PATH: &str =
     r"C:\Users\Burvy\AppData\Local\Posh-ACME\LE_PROD\3716529536\174.175.161.63\fullchain.cer";
 
@@ -62,10 +64,16 @@ impl Plugin for ServerPlugin {
 
 fn startup(mut cmds: Commands) -> Result {
     // real certificate instead of using digest
+    #[cfg(not(feature = "dev-local"))]
     let identity = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
         .block_on(Identity::load_pemfiles(CERT_PATH, KEY_PATH))?;
+
+    // offline dev: throwaway certificate generated at startup, no files and no
+    // network. the client's dev-local skips validation, so contents don't matter.
+    #[cfg(feature = "dev-local")]
+    let identity = Identity::self_signed(["localhost", "127.0.0.1"])?;
 
     let server = cmds
         .spawn((
