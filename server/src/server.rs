@@ -123,6 +123,7 @@ fn on_connect(
     ));
 }
 
+/// Simulates player movement on the server
 fn server_player_motion(
     mut players: Query<
         (
@@ -139,6 +140,7 @@ fn server_player_motion(
     }
 }
 
+/// Logging function to show connected things every minute
 fn heartbeat(
     clients: Query<(), (With<ClientOf>, With<Connected>)>,
     senders: Query<(), With<ReplicationSender>>,
