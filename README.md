@@ -4,6 +4,11 @@ To run a quick dev build:
 `cargo run -p shooter --features dev-local`
 `cargo run -p shooter-server --features dev-local`
 
+To fully build:  
+`cargo build -p shooter-server --features`  
+Put the server on the desktop, run it  
+`.\build.ps1` on burvy.dev repo  
+
 When the game is built with dev-local,  
 The client has no TLS validation,  
 The server connects to localhost and self signs without PEM files  
