@@ -25,6 +25,9 @@ pub fn build_baseplate(
     ));
 }
 
+/// Draw interactable entities
+/// TODO: for the mesh and material, eventually use an enum that determines what to draw
+/// instead of hardcoding it like it is right now
 pub fn draw_interactables(
     mut cmds: Commands,
     interactables: Query<Entity, Added<stuff::definition::Interactable>>,
@@ -33,6 +36,7 @@ pub fn draw_interactables(
 ) {
     for interactable in &interactables {
         cmds.entity(interactable).insert((
+            // TODO: use enum based on component to determine what to draw
             stuff::ibox::definition::InteractableBox::default(),
             Mesh3d(mesh.add(Cuboid::new(
                 stuff::ibox::definition::BOX_SIZE,
