@@ -91,7 +91,7 @@ fn startup(mut cmds: Commands) -> Result {
     // world building
     cmds.spawn(world::definition::Baseplate::default());
     cmds.spawn((
-        stuff::ibox::definition::InteractableBox,
+        stuff::ibox::definition::InteractableBox::default(),
         stuff::definition::Interactable,
         Position(Vec3::new(0.0, 1.0, 0.0)),
         Replicate::to_clients(NetworkTarget::All),
