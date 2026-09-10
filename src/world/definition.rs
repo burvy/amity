@@ -20,18 +20,31 @@ pub fn build_baseplate(
     ));
 
     cmds.spawn((
-        stuff::ibox::definition::InteractableBox::default(),
-        Mesh3d(mesh.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d::<StandardMaterial>(mats.add(Color::srgb_u8(0, 128, 255))),
-    ));
-
-    cmds.spawn((
         DirectionalLight::default(),
         Transform::from_translation(Vec3::new(5.0, 5.0, 10.0)).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }
 
-/// Draw a debug grid
+pub fn draw_interactables(
+    mut cmds: Commands,
+    interactables: Query<Entity, Added<stuff::definition::Interactable>>,
+    mut mesh: ResMut<Assets<Mesh>>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+) {
+    for interactable in &interactables {
+        cmds.entity(interactable).insert((
+            stuff::ibox::definition::InteractableBox::default(),
+            Mesh3d(mesh.add(Cuboid::new(
+                stuff::ibox::definition::BOX_SIZE,
+                stuff::ibox::definition::BOX_SIZE,
+                stuff::ibox::definition::BOX_SIZE,
+            ))),
+            MeshMaterial3d::<StandardMaterial>(mats.add(Color::srgb_u8(0, 128, 255))),
+        ));
+    }
+}
+
+/// Draw a debug grid (local only)
 pub fn draw_grid(mut gizmos: Gizmos) {
     gizmos.grid(
         Isometry3d::new(Vec3::new(0.0, -2.49, 0.0), Quat::from_rotation_x(FRAC_PI_2)),

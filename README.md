@@ -14,3 +14,7 @@ Remember that new player inputs must be added in `PlayerInputs`
 which is in `protocol.rs` in PROTOCOL  
 The client gets to send input through `buffer_input` in `net.rs` 
 on the CLIENT
+
+## Components
+Look at the basic `Interactable` component in `definition.rs` of `protocol/stuff`. Remember those traits, 
+since we need those to replicate over the protocol.

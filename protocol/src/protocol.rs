@@ -19,6 +19,8 @@ use lightyear::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::stuff;
+
 /// Shared physics timestep between server and client
 pub const TIMESTEP: f64 = 1.0 / 64.0;
 /// It is best to fix a specific server IP and port, so the clients know who
@@ -39,6 +41,8 @@ pub struct ProtocolPlugin;
 impl Plugin for ProtocolPlugin {
     fn build(&self, app: &mut App) {
         app.component::<PlayerMarker>().replicate();
+        app.component::<stuff::definition::Interactable>()
+            .replicate();
 
         // ---
         // Having gravity set to 0 here would be confusing.
