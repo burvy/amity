@@ -14,7 +14,7 @@ use lightyear::{
     netcode::{server_plugin::NetcodeConfig, NetcodeServer},
     webtransport::server::WebTransportServerIo,
 };
-use shooter_protocol::{protocol, shared, world};
+use shooter_protocol::{protocol, shared, stuff, world};
 
 // use powershell:
 // Install-Module -Name Posh-ACME -Scope CurrentUser
@@ -90,7 +90,7 @@ fn startup(mut cmds: Commands) -> Result {
 
     // world building
     cmds.spawn(world::definition::Baseplate::default());
-    cmds.spawn(world::definition::InteractableBox::default());
+    cmds.spawn(stuff::ibox::definition::InteractableBox::default());
 
     cmds.trigger(Start { entity: server });
     Ok(())

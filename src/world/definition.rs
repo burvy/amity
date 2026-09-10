@@ -1,10 +1,7 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
-use shooter_protocol::world::{
-    self,
-    definition::{BASEPLATE_LENGTH, BASEPLATE_THICKNESS},
-};
+use shooter_protocol::{stuff, world};
 
 pub fn build_baseplate(
     mut cmds: Commands,
@@ -15,15 +12,15 @@ pub fn build_baseplate(
     cmds.spawn((
         world::definition::Baseplate::default(),
         Mesh3d(mesh.add(Cuboid::new(
-            BASEPLATE_LENGTH,
-            BASEPLATE_THICKNESS,
-            BASEPLATE_LENGTH,
+            world::definition::BASEPLATE_LENGTH,
+            world::definition::BASEPLATE_THICKNESS,
+            world::definition::BASEPLATE_LENGTH,
         ))),
         MeshMaterial3d::<StandardMaterial>(mats.add(Color::srgb_u8(255, 128, 64))),
     ));
 
     cmds.spawn((
-        world::definition::InteractableBox::default(),
+        stuff::ibox::definition::InteractableBox::default(),
         Mesh3d(mesh.add(Cuboid::new(1.0, 1.0, 1.0))),
         MeshMaterial3d::<StandardMaterial>(mats.add(Color::srgb_u8(0, 128, 255))),
     ));
@@ -38,7 +35,7 @@ pub fn build_baseplate(
 pub fn draw_grid(mut gizmos: Gizmos) {
     gizmos.grid(
         Isometry3d::new(Vec3::new(0.0, -2.49, 0.0), Quat::from_rotation_x(FRAC_PI_2)),
-        UVec2::splat(BASEPLATE_LENGTH as u32),
+        UVec2::splat(world::definition::BASEPLATE_LENGTH as u32),
         Vec2::splat(1.0),
         Color::srgb_u8(255, 0, 0),
     );
