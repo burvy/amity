@@ -1,0 +1,5 @@
+# Pinned because .cargo/config.toml uses -Z flags, which stable rejects outright.
+# Bump deliberately; a nightly bump can break -Zshare-generics.
+[toolchain]
+channel = "nightly-2026-09-03"
+targets = ["x86_64-pc-windows-msvc", "wasm32-unknown-unknown"]
