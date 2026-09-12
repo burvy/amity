@@ -84,8 +84,13 @@ pub fn can_interact_prompt(
     mut prompt_visibility: Single<&mut Visibility, With<definition::InteractionPrompt>>,
     player_info: Res<definition::PlayerInfo>,
 ) {
-    match player_info.can_interact {
-        true => **prompt_visibility = Visibility::Visible,
-        false => **prompt_visibility = Visibility::Hidden,
+    let target = if player_info.can_interact {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+
+    if **prompt_visibility != target {
+        **prompt_visibility = target;
     }
 }
