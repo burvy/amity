@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin};
 use shooter_protocol::protocol;
+mod logic;
 mod server;
 
 fn main() {
