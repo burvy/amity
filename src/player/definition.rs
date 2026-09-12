@@ -49,7 +49,8 @@ pub fn spawn_interact_prompt(mut cmds: Commands) {
         },
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Percent(55.0),
+            top: Val::Percent(65.0),
+            right: Val::Percent(50.0),
             width: Val::Percent(100.0),
             justify_content: JustifyContent::Center,
             ..default()
