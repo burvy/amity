@@ -37,5 +37,10 @@ impl Plugin for MainPlugin {
         app.add_plugins(world::WorldPlugin);
         app.add_plugins(net::NetPlugin);
         app.add_plugins(shooter_protocol::protocol::ProtocolPlugin);
+
+        // dev-local only: `WorldInspectorPlugin` brings its own egui setup, so
+        // there is nothing else to register.
+        #[cfg(feature = "dev-local")]
+        app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
     }
 }

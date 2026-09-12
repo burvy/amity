@@ -12,9 +12,13 @@ edition = "2024"
 # "build wasm, deploy, open browser" into one command.
 # NEVER use this for actual native
 # clients
+# Also carries dev-only tooling: the egui world inspector and bevy's UI
+# outline overlay. Neither is compiled into a shipped build.
 dev-local = [
     "shooter-protocol/dev-local",
     "lightyear/webtransport_dangerous_configuration",
+    "bevy/bevy_ui_debug",
+    "dep:bevy-inspector-egui",
 ]
 
 [dependencies]
@@ -40,6 +44,8 @@ lightyear = { version = "0.28.0", default-features = false, features = [
     "avian3d",
 ]}
 shooter-protocol = { path = "protocol"} # protocol shared with server (client is root)
+# dev-local only: live inspector for tuning UI nodes and eyeballing replication.
+bevy-inspector-egui = { version = "0.37", optional = true }
 # Set max log levels. This helps avoid unwanted low-severity log spam, which can affect performance.
 log = { version = "0.4", features = [
     "max_level_debug",
