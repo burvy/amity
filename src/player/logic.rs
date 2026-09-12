@@ -5,7 +5,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 use lightyear::prelude::*;
-use shooter_protocol::{protocol, shared, stuff};
+use shooter_protocol::{shared, stuff};
 
 use crate::player::definition;
 
@@ -79,3 +79,5 @@ pub fn client_interaction_checker(
         player_info.can_interact = should_interact
     }
 }
+
+pub fn can_interact_prompt() {}

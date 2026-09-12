@@ -16,7 +16,10 @@ impl Plugin for PlayerPlugin {
             can_interact: false,
         });
 
-        app.add_systems(Startup, definition::spawn_camera);
+        app.add_systems(
+            Startup,
+            (definition::spawn_camera, definition::spawn_interact_prompt),
+        );
         app.add_systems(
             Update,
             (
@@ -25,6 +28,7 @@ impl Plugin for PlayerPlugin {
                 logic::rotate_player_resource,
                 logic::camera_follow_player,
                 logic::client_interaction_checker,
+                logic::can_interact_prompt,
             ),
         );
     }

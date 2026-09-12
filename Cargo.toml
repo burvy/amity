@@ -22,7 +22,12 @@ dev-local = [
 avian3d = "0.7.0"
 # cut down on the size of bevy
 # TODO: re-add necessary features, probably want audio..
-bevy = { version = "0.19", default-features = false, features = ["3d"]}
+bevy = { version = "0.19", default-features = false, features = [
+    "3d",
+    "ui_bevy_render",
+    "bevy_text",
+    "default_font"
+]}
 lightyear = { version = "0.28.0", default-features = false, features = [
     "std",
     "client",

@@ -35,3 +35,25 @@ pub fn spawn_camera(mut cmds: Commands) {
         MainPlayerCamera
     });
 }
+
+#[derive(Component)]
+pub struct InteractionPrompt;
+
+pub fn spawn_interact_prompt(mut cmds: Commands) {
+    cmds.spawn((
+        InteractionPrompt,
+        Text::new(format!("Press {} to interact", "E")), // TODO: configurable inputs
+        TextFont {
+            font_size: FontSize::Px(20.0),
+            ..default()
+        },
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Percent(55.0),
+            width: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        Visibility::Hidden,
+    ));
+}
