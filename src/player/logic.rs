@@ -80,4 +80,12 @@ pub fn client_interaction_checker(
     }
 }
 
-pub fn can_interact_prompt() {}
+pub fn can_interact_prompt(
+    mut prompt_visibility: Single<&mut Visibility, With<definition::InteractionPrompt>>,
+    player_info: Res<definition::PlayerInfo>,
+) {
+    match player_info.can_interact {
+        true => **prompt_visibility = Visibility::Visible,
+        false => **prompt_visibility = Visibility::Hidden,
+    }
+}
