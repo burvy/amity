@@ -13,6 +13,7 @@ impl Plugin for PlayerPlugin {
         app.insert_resource(definition::PlayerInfo {
             look: Vec2::ZERO,
             paused: true,
+            can_interact: false,
         });
 
         app.add_systems(Startup, definition::spawn_camera);
@@ -23,6 +24,7 @@ impl Plugin for PlayerPlugin {
                 logic::pause_on_esc,
                 logic::rotate_player_resource,
                 logic::camera_follow_player,
+                logic::client_interaction_checker,
             ),
         );
     }

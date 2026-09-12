@@ -5,7 +5,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 use lightyear::prelude::*;
-use shooter_protocol::shared;
+use shooter_protocol::{protocol, shared, stuff};
 
 use crate::player::definition;
 
@@ -52,4 +52,30 @@ pub fn camera_follow_player(
 ) {
     camera.translation = player.0 + Vec3::Y * shared::EYE_HEIGHT;
     camera.rotation = Quat::from_euler(EulerRot::YXZ, look_res.look.x, look_res.look.y, 0.0);
+}
+
+/// Sets can_interact to true on PlayerInfo if lookng at an entity that contains Interactable
+pub fn client_interaction_checker(
+    spatial: SpatialQuery,
+    mut player_info: ResMut<definition::PlayerInfo>,
+    player: Single<(Entity, &Position), With<Controlled>>,
+    interactables: Query<(), With<stuff::definition::Interactable>>,
+) {
+    let (player, position) = player.into_inner();
+
+    let rot = Quat::from_euler(EulerRot::YXZ, player_info.look.x, player_info.look.y, 0.0);
+    let Ok(dir) = Dir3::new(rot * Vec3::NEG_Z) else {
+        return;
+    };
+
+    let origin = position.0 + Vec3::Y * shared::EYE_HEIGHT;
+    let filter = SpatialQueryFilter::from_excluded_entities([player]);
+
+    let should_interact = spatial
+        .cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter)
+        .is_some_and(|hit| interactables.contains(hit.entity));
+
+    if player_info.can_interact != should_interact {
+        player_info.can_interact = should_interact
+    }
 }

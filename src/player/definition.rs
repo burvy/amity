@@ -12,6 +12,7 @@ const SENSITIVITY: f32 = 0.0025;
 pub struct PlayerInfo {
     pub paused: bool,
     pub look: Vec2,
+    pub can_interact: bool,
 }
 
 impl PlayerInfo {

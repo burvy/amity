@@ -33,7 +33,7 @@ pub const PLAYER_HALF_HEIGHT: f32 = PLAYER_LENGTH / 2.0 + PLAYER_RADIUS;
 pub const GROUND_TOLERANCE: f32 = 0.1;
 
 /// Distance to consider interaction
-pub const INTERACT_DISTANCE: f32 = 3.0;
+pub const INTERACT_DISTANCE: f32 = 4.0;
 
 /// Shared player body definition to ensure similar simulation between
 /// client and server
