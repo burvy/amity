@@ -2,8 +2,9 @@ use avian3d::dynamics::rigid_body::LinearVelocity;
 use avian3d::physics_transform::{Position, Rotation};
 use avian3d::spatial_query::{ShapeHits, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
+use lightyear::core::timeline::LocalTimeline;
 use lightyear::prelude::input::native::ActionState;
-use shooter_protocol::{protocol, shared};
+use shooter_protocol::{protocol, shared, stuff};
 
 /// Simulates player movement on the server
 pub fn server_player_motion(
@@ -33,7 +34,10 @@ pub fn server_interact(
         (Entity, &Position, &ActionState<protocol::PlayerInputs>),
         With<protocol::PlayerMarker>,
     >,
+    mut targets: Query<&mut stuff::definition::Interactable>,
+    timeline: Res<LocalTimeline>,
 ) {
+    let tick = timeline.tick();
     for (player, position, action) in &players {
         if !action.0.interact {
             continue; // skip if not interacting
@@ -48,11 +52,19 @@ pub fn server_interact(
         let filter = SpatialQueryFilter::from_excluded_entities([player]);
 
         if let Some(hit) = spatial.cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter) {
-            // logic to run upon interaction
-            info!(
-                "{} interacted with {} at distance {}",
-                player, hit.entity, hit.distance
-            );
+            let Ok(mut interactable) = targets.get_mut(hit.entity) else {
+                continue;
+            };
+            if interactable.ready(tick) {
+                interactable.last_interacted = tick;
+                // logic to run upon interaction
+                info!(
+                    "{} interacted with {} at distance {}",
+                    player, hit.entity, hit.distance
+                );
+            } else {
+                continue;
+            }
         }
     }
 }

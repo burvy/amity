@@ -9,6 +9,9 @@ To fully build:
 Put the server on the desktop, run it  
 `.\build.ps1` on burvy.dev repo  
 
+The released executables are at:
+`C:\ct\burvy-game\x86_64-pc-windows-msvc\release\`
+
 When the game is built with dev-local,  
 The client has no TLS validation,  
 The server connects to localhost and self signs without PEM files  

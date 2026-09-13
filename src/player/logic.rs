@@ -59,7 +59,8 @@ pub fn client_interaction_checker(
     spatial: SpatialQuery,
     mut player_info: ResMut<definition::PlayerInfo>,
     player: Single<(Entity, &Position), With<Controlled>>,
-    interactables: Query<(), With<stuff::definition::Interactable>>,
+    interactables: Query<&stuff::definition::Interactable>,
+    timeline: Res<LocalTimeline>,
 ) {
     let (player, position) = player.into_inner();
 
@@ -71,9 +72,10 @@ pub fn client_interaction_checker(
     let origin = position.0 + Vec3::Y * shared::EYE_HEIGHT;
     let filter = SpatialQueryFilter::from_excluded_entities([player]);
 
+    let tick = timeline.tick();
     let should_interact = spatial
         .cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter)
-        .is_some_and(|hit| interactables.contains(hit.entity));
+        .is_some_and(|hit| interactables.get(hit_entity).is_ok_and(|i| i.ready(tick)));
 
     if player_info.can_interact != should_interact {
         player_info.can_interact = should_interact
