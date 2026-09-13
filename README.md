@@ -9,8 +9,10 @@ To fully build:
 Put the server on the desktop, run it  
 `.\build.ps1` on burvy.dev repo  
 
-The released executables are at:
-`C:\ct\burvy-game\x86_64-pc-windows-msvc\release\`
+The released executables are at:  
+`C:\ct\burvy-game\x86_64-pc-windows-msvc\release\`  
+because of the filepath changes in .cargo that shortens the path so cargo 
+check works
 
 When the game is built with dev-local,  
 The client has no TLS validation,  
