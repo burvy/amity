@@ -157,8 +157,16 @@ fn buffer_input(
         With<InputMarker<protocol::PlayerInputs>>,
     >,
     keys: Res<ButtonInput<KeyCode>>,
-    look_res: ResMut<player::definition::PlayerInfo>, // yaw/pitch stored in resource
+    look_res: Res<player::definition::PlayerInfo>, // yaw/pitch stored in resource
 ) {
+    if look_res.paused {
+        action.0 = protocol::PlayerInputs {
+            look: look_res.look,
+            ..default()
+        };
+        return;
+    }
+
     // TODO: configurable inputs
     let fwd = f32::from(keys.pressed(KeyCode::KeyW));
     let bwd = f32::from(keys.pressed(KeyCode::KeyS));

@@ -51,7 +51,11 @@ pub fn draw_interactables(
 /// Draw a debug grid (local only)
 pub fn draw_grid(mut gizmos: Gizmos) {
     gizmos.grid(
-        Isometry3d::new(Vec3::new(0.0, -2.49, 0.0), Quat::from_rotation_x(FRAC_PI_2)),
+        Isometry3d::new(Vec3::new(
+            0.0,
+            world::definition::BASEPLATE_Y + world::definition::BASEPLATE_THICKNESS / 2.0 + 0.01,
+            0.0,
+        ), Quat::from_rotation_x(FRAC_PI_2)),
         UVec2::splat(world::definition::BASEPLATE_LENGTH as u32),
         Vec2::splat(1.0),
         Color::srgb_u8(255, 0, 0),

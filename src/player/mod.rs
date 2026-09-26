@@ -36,8 +36,8 @@ impl Plugin for PlayerPlugin {
             (
                 grab_on_click,
                 logic::pause_on_esc,
-                logic::rotate_player_resource,
-                logic::camera_follow_player,
+                (logic::rotate_player_resource,
+                logic::camera_follow_player).chain(),
                 logic::client_interaction_checker,
                 logic::can_interact_prompt,
             ),

@@ -46,7 +46,10 @@ impl Plugin for ServerPlugin {
         });
         app.add_observer(on_connect);
 
-        app.add_systems(FixedUpdate, clear_stale_input).chain();
+        app.add_systems(
+            FixedUpdate,
+            clear_stale_input.before(logic::server_player_motion),
+        );
         app.add_systems(
             FixedUpdate,
             (logic::server_player_motion, logic::server_interact).chain(),
