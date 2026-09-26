@@ -1,28 +1,28 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
-use shooter_protocol::{stuff, world};
+use lightyear::prelude::MessageReceiver;
+use shooter_protocol::{
+    stuff,
+    world::{self, chunk},
+};
 
-pub fn build_baseplate(
-    mut cmds: Commands,
-    mut mesh: ResMut<Assets<Mesh>>,
-    mut mats: ResMut<Assets<StandardMaterial>>,
-) {
-    // world building
-    cmds.spawn((
-        world::definition::Baseplate::default(),
-        Mesh3d(mesh.add(Cuboid::new(
-            world::definition::BASEPLATE_LENGTH,
-            world::definition::BASEPLATE_THICKNESS,
-            world::definition::BASEPLATE_LENGTH,
-        ))),
-        MeshMaterial3d::<StandardMaterial>(mats.add(Color::srgb_u8(255, 128, 64))),
-    ));
-
+pub fn spawn_light(mut cmds: Commands) {
     cmds.spawn((
         DirectionalLight::default(),
         Transform::from_translation(Vec3::new(5.0, 5.0, 10.0)).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+}
+
+/// Spawns chunks sent by the server
+pub fn receive_chunks(
+    mut cmds: Commands,
+    mut receiver: Single<&mut MessageReceiver<chunk::ChunkData>>,
+) {
+    for chunk::ChunkData { pos, chunk } in receiver.receive() {
+        info!("received chunk {:?}", pos.0);
+        cmds.spawn(chunk::chunk_body(pos, chunk));
+    }
 }
 
 /// Draw interactable entities

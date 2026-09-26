@@ -25,7 +25,24 @@ impl Block {
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct ChunkPos(pub IVec3);
 
-#[derive(Component, Clone)]
+impl ChunkPos {
+    /// world position of this chunk's (0, 0, 0) block corner
+    pub fn origin(self) -> Vec3 {
+        (self.0 * CHUNK_SIZE).as_vec3()
+    }
+}
+
+/// Server -> client: the full contents of one chunk
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ChunkData {
+    pub pos: ChunkPos,
+    pub chunk: Chunk,
+}
+
+/// Ordered + reliable, so later block edits can never overtake the chunk they modify
+pub struct WorldChannel;
+
+#[derive(Component, Clone, Serialize, Deserialize)]
 pub struct Chunk {
     blocks: Box<[Block]>,
 }
@@ -73,4 +90,15 @@ impl Chunk {
     pub fn collider(&self) -> Collider {
         Collider::voxels(Vec3::ONE, &self.solid().collect::<Vec<_>>())
     }
+}
+
+/// Agreed-upon chunk entity for both client and server
+pub fn chunk_body(pos: ChunkPos, chunk: Chunk) -> impl Bundle {
+    (
+        pos,
+        Position(pos.origin()),
+        RigidBody::Static,
+        chunk.collider(),
+        chunk,
+    )
 }

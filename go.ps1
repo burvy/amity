@@ -33,16 +33,22 @@ function Invoke-Step($Description, [scriptblock] $Command) {
     if ($LASTEXITCODE -ne 0) { throw "$Description failed" }
 }
 
+# Ask cargo where target/ is rather than hardcoding it, so moving target-dir
+# again (as we did to dodge the Windows command-line limit) doesn't break this.
+$targetDir = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).target_directory
+
 if ($Mode -eq 'dev') {
     # Build both before launching anything: `cargo run` would start the client
     # while the server is still compiling, and it would fail to connect.
     Invoke-Step 'building server' { cargo build -p shooter-server --features dev-local }
     Invoke-Step 'building client' { cargo build --features dev-local }
 
+    # Run the built exe directly: the new window needs no cargo on PATH and
+    # doesn't contend with the client's `cargo run` for the build lock.
+    $server = Join-Path $targetDir 'x86_64-pc-windows-msvc\debug\shooter-server.exe'
     Write-Host "`n==> starting server in a new window" -ForegroundColor Cyan
-    Start-Process pwsh -ArgumentList @(
-        '-NoExit', '-Command',
-        "Set-Location '$PSScriptRoot'; cargo run -p shooter-server --features dev-local"
+    Start-Process pwsh -WorkingDirectory $PSScriptRoot -ArgumentList @(
+        '-NoExit', '-Command', "& '$server'"
     )
 
     # Client runs here so Ctrl+C returns you to a prompt; the server window
@@ -53,9 +59,6 @@ if ($Mode -eq 'dev') {
 }
 
 # RELEASE
-# Ask cargo where target/ is rather than hardcoding it, so moving target-dir
-# again (as we did to dodge the Windows command-line limit) doesn't break this.
-$targetDir = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).target_directory
 $exe = Join-Path $targetDir 'x86_64-pc-windows-msvc\release\shooter-server.exe'
 
 Invoke-Step 'building server (release)' { cargo build --release -p shooter-server }

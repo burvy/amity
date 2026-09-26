@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::logic;
+use crate::{generation, logic};
 use avian3d::physics_transform::Position;
 use bevy::prelude::*;
 use lightyear::input::input_buffer::InputBuffer;
@@ -13,7 +13,8 @@ use lightyear::{
     netcode::{server_plugin::NetcodeConfig, NetcodeServer},
     webtransport::server::WebTransportServerIo,
 };
-use shooter_protocol::{protocol, shared, stuff, world};
+use shooter_protocol::world::chunk::{self, Chunk, ChunkData, ChunkPos};
+use shooter_protocol::{protocol, shared, stuff};
 // use powershell:
 // Install-Module -Name Posh-ACME -Scope CurrentUser
 // Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
@@ -54,7 +55,7 @@ impl Plugin for ServerPlugin {
             FixedUpdate,
             (logic::server_player_motion, logic::server_interact).chain(),
         );
-        app.add_systems(Update, heartbeat);
+        app.add_systems(Update, (heartbeat, send_world));
 
         // this is not default, but prevents clients from controlling
         // entities they shouldn't be on the server
@@ -92,7 +93,12 @@ fn startup(mut cmds: Commands) -> Result {
         .id();
 
     // world building
-    cmds.spawn(world::definition::Baseplate::default());
+    for x in -1..=0 {
+        for z in -1..=0 {
+            let pos = ChunkPos(IVec3::new(x, -1, z));
+            cmds.spawn(chunk::chunk_body(pos, generation::generate(pos)));
+        }
+    }
     cmds.spawn((
         stuff::ibox::definition::InteractableBox::default(),
         stuff::definition::Interactable {
@@ -142,6 +148,22 @@ fn on_connect(
             lifetime: Default::default(), // despawn upon disconnect (SessionBased)
         },
     ));
+}
+
+/// Sends every chunk to newly connected clients
+fn send_world(
+    mut clients: Query<&mut MessageSender<ChunkData>, (Added<Connected>, With<ClientOf>)>,
+    chunks: Query<(&ChunkPos, &Chunk)>,
+) {
+    for mut sender in &mut clients {
+        for (pos, chunk) in &chunks {
+            sender.send::<chunk::WorldChannel>(ChunkData {
+                pos: *pos,
+                chunk: chunk.clone(),
+            });
+        }
+        info!("sent {} chunks", chunks.iter().count());
+    }
 }
 
 /// Logging function to show connected things every minute

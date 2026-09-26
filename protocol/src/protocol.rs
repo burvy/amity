@@ -15,11 +15,14 @@ use lightyear::{
     input::{config::InputConfig, native::plugin::InputPlugin},
     interpolation::registry::InterpolationRegistrationExt,
     prediction::registry::PredictionBuilderExt,
-    prelude::AppComponentExt,
+    prelude::{
+        AppChannelExt, AppComponentExt, AppMessageExt, ChannelMode, ChannelSettings,
+        NetworkDirection, ReliableSettings,
+    },
 };
 use serde::{Deserialize, Serialize};
 
-use crate::stuff;
+use crate::{stuff, world::chunk};
 
 /// Shared physics timestep between server and client
 pub const TIMESTEP: f64 = 1.0 / 64.0;
@@ -43,6 +46,20 @@ impl Plugin for ProtocolPlugin {
         app.component::<PlayerMarker>().replicate();
         app.component::<stuff::definition::Interactable>()
             .replicate();
+
+        // sends big chunks to the player
+        // to send block edits back we should just
+        // use a different channel, EditChannel since
+        // it is cleaner.
+        // lost packets are resent until they arrive
+        app.add_channel::<chunk::WorldChannel>(ChannelSettings {
+            mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+            ..default()
+        })
+        .add_direction(NetworkDirection::ServerToClient);
+
+        app.register_message::<chunk::ChunkData>()
+            .add_direction(NetworkDirection::ServerToClient);
 
         // ---
         // Having gravity set to 0 here would be confusing.
