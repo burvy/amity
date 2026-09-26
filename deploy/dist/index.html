@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+    <head>
+        <title>burvy's site</title>
+        
+<script type="module">
+import init, * as bindings from '/burvy-dev-7c63b5681e461c5d.js';
+const wasm = await init({ module_or_path: '/burvy-dev-7c63b5681e461c5d_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+        <!-- copies assets/images folder into dist/images -->
+        
+        
+        <!-- lazily-loaded wasm experiences, built by build.sh before this
+             runs. they are fetched on demand by /game, /life and /shooter, never
+             part of the initial page load -->
+        
+        
+        
+        <link rel="stylesheet" href="/app-5e79bb70562346e9.css" integrity="sha384-Dmo+QYKtgT1uUF4I1Wp6m59LoCILyVSVBPD6s9RsUdTAWht+v+tHxPi9xa83IRva"/>
+    <link rel="modulepreload" href="/burvy-dev-7c63b5681e461c5d.js" crossorigin="anonymous" integrity="sha384-CpGfz4WJ94FampbGo52OmXclE4+rsoVSi68uDLb9Uta+INuewqi0SRk2YAZrhN6J"><link rel="modulepreload" href="/snippets/burvy-dev-15e93f376a2dd54c/inline0.js" crossorigin="anonymous" integrity="sha384-Adhwbrv5Eedhr9j7c/v4E2UOsRHh19nHPijOSrEB/Xi7xoICVt6myAjmzGmd1seH"><link rel="preload" href="/burvy-dev-7c63b5681e461c5d_bg.wasm" crossorigin="anonymous" integrity="sha384-PCbfgmsHOxu0SLv5PijHgE3a4aKn1nMXtTo3MEnAHgKYea4k/tjcmlyIwhGFRk8P" as="fetch" type="application/wasm"></head>
+    <body></body>
+</html>

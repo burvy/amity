@@ -75,7 +75,7 @@ pub fn client_interaction_checker(
     let tick = timeline.tick();
     let should_interact = spatial
         .cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter)
-        .is_some_and(|hit| interactables.get(hit_entity).is_ok_and(|i| i.ready(tick)));
+        .is_some_and(|hit| interactables.get(hit.entity).is_ok_and(|i| i.ready(tick)));
 
     if player_info.can_interact != should_interact {
         player_info.can_interact = should_interact

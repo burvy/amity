@@ -4,6 +4,10 @@ To run a quick dev build:
 `cargo run -p shooter --features dev-local`
 `cargo run -p shooter-server --features dev-local`
 
+`.\go.ps1`
+`.\go.ps1 dev`
+`.\go.ps1 release`
+
 To fully build:  
 `cargo build -p shooter-server --release`  
 Put the server on the desktop, run it  
