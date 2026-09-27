@@ -5,6 +5,7 @@
 //! - `settings.rs`: what the world looks like (tweak here)
 //! - `terrain.rs`: turns settings + a chunk position into blocks
 //! - `lakes.rs`: where water collects on land, a region at a time
+//! - `surface.rs`: surface rules, what the top of the ground is made of
 //! - `config.rs`: how far ahead and how many at once
 //! - `logic.rs`: the background task plumbing
 
@@ -15,6 +16,7 @@ use crate::player::{config::SPAWN_XZ, definition::SpawnPoint};
 pub mod config;
 mod lakes;
 mod logic;
+mod surface;
 pub mod settings;
 pub mod terrain;
 

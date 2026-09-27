@@ -4,6 +4,7 @@
 //! Units: heights and sizes are in metres (a block is BLOCK_SIZE = 0.5 m),
 //! depths counted in blocks say so.
 
+use amity_protocol::world::block::Block;
 use bevy::prelude::*;
 
 /// One world's generation settings. Later this can be loaded from a preset file,
@@ -13,8 +14,6 @@ pub struct WorldGenSettings {
     /// Picks which world you get. Same seed + same settings = the same world,
     /// block for block, every time
     pub seed: u32,
-    /// Blocks of dirt between the grass and the stone (and of sand under water)
-    pub dirt_depth: i32,
     /// Height of the ocean's surface (metres). Ocean, and basins connected to it,
     /// fill with water up to here
     pub sea_level: f64,
@@ -24,13 +23,14 @@ pub struct WorldGenSettings {
     pub continents: Continents,
     /// Noise layers added on top of the continents' base height. See `NoiseLayer`
     pub layers: Vec<NoiseLayer>,
+    /// What the top of the ground is made of. See `SurfaceSettings`
+    pub surface: SurfaceSettings,
 }
 
 impl Default for WorldGenSettings {
     fn default() -> Self {
         Self {
             seed: 0,
-            dirt_depth: 3,
             sea_level: 0.0,
             lakes: LakeSettings {
                 region: 2048.0,
@@ -80,8 +80,127 @@ impl Default for WorldGenSettings {
                     inland: false,
                 },
             ],
+            surface: SurfaceSettings {
+                rules: vec![
+                    // lake and sea floors
+                    SurfaceRule {
+                        when: When {
+                            under_water: Some(true),
+                            ..When::default()
+                        },
+                        layers: vec![(Block::SAND, 4)],
+                    },
+                    // beaches: dry ground just above water
+                    SurfaceRule {
+                        when: When {
+                            under_water: Some(false),
+                            above_water: Some((0.0, 1.5)),
+                            ..When::default()
+                        },
+                        layers: vec![(Block::SAND, 3)],
+                    },
+                    // cliffs: too steep for anything to stay, so bare stone
+                    SurfaceRule {
+                        when: When {
+                            slope: (50.0, 90.0),
+                            ..When::default()
+                        },
+                        layers: vec![],
+                    },
+                    // scree: loose rock on steep slopes
+                    SurfaceRule {
+                        when: When {
+                            slope: (35.0, 50.0),
+                            ..When::default()
+                        },
+                        layers: vec![(Block::GRAVEL, 2)],
+                    },
+                    // snow on the peaks: roughly the highest 2% of land
+                    SurfaceRule {
+                        when: When {
+                            altitude: (40.0, f64::MAX),
+                            ..When::default()
+                        },
+                        layers: vec![(Block::SNOW, 2)],
+                    },
+                    // everything else
+                    SurfaceRule {
+                        when: When::default(),
+                        layers: vec![(Block::GRASS, 1), (Block::DIRT, 3)],
+                    },
+                ],
+                wobble: Wobble {
+                    noise: Fractal {
+                        scale: 60.0,
+                        octaves: 3,
+                        persistence: 0.5,
+                        lacunarity: 2.0,
+                    },
+                    height: 6.0,
+                },
+            },
         }
     }
+}
+
+/// What the top of the ground is made of. `surface.rs` explains how the rules
+/// are used
+#[derive(Clone, Debug)]
+pub struct SurfaceSettings {
+    /// Checked top to bottom for every column: the first rule whose `when`
+    /// matches gives the column its layers. A column no rule matches is bare
+    /// stone, so the last rule should usually match anything
+    pub rules: Vec<SurfaceRule>,
+    /// Shifts the altitude the rules see by a little noise, so an altitude line
+    /// like the snowline wanders across the land instead of being perfectly flat
+    pub wobble: Wobble,
+}
+
+/// One surface rule: where it applies, and what it puts there
+#[derive(Clone, Debug)]
+pub struct SurfaceRule {
+    /// The conditions a column must meet. `When::default()` matches anything
+    pub when: When,
+    /// The blocks from the top of the ground down, as (block, how many blocks
+    /// thick). Stone continues below. Empty: bare stone
+    pub layers: Vec<(Block, i32)>,
+}
+
+/// Conditions on a column. Every one set must hold; unset ones don't matter.
+/// Ranges are (min, max): min included, max not
+#[derive(Clone, Debug)]
+pub struct When {
+    /// Ground height in metres (with the wobble added)
+    pub altitude: (f64, f64),
+    /// Steepness in degrees: 0 flat, 45 one block up per block across, 90 a wall
+    pub slope: (f64, f64),
+    /// Some(true): only under water. Some(false): only dry. None: either
+    pub under_water: Option<bool>,
+    /// Only where there's water around (in this column's lake cell, a
+    /// neighbouring column, or the sea near the coast), and the ground is this many
+    /// metres above its surface. Good for beaches and shores
+    pub above_water: Option<(f64, f64)>,
+}
+
+impl Default for When {
+    /// Matches anything
+    fn default() -> Self {
+        Self {
+            altitude: (f64::MIN, f64::MAX),
+            slope: (0.0, 91.0),
+            under_water: None,
+            above_water: None,
+        }
+    }
+}
+
+/// A little noise added to a height
+#[derive(Clone, Debug)]
+pub struct Wobble {
+    /// The shape of the wobble: `scale` is how far apart its ups and downs are
+    pub noise: Fractal,
+    /// Metres it moves the height up or down, at most
+    pub height: f64,
 }
 
 /// How lakes are found. `lakes.rs` explains the method: the world is split into

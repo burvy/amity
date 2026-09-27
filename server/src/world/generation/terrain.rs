@@ -11,10 +11,11 @@
 //!    coast and sea floors stay smooth.
 //! 3. **Water.** Each column's water surface comes from `lakes.rs`: basins fill
 //!    to their lowest rim point, and anything out at sea fills to `sea_level`.
-//! 4. **Blocks from height.** Going down a column from the ground: one grass
-//!    block, `dirt_depth` dirt blocks, then stone forever. Above the ground is
-//!    water up to the water surface (if any), then air. Ground under water gets
-//!    sand instead of grass and dirt.
+//! 4. **Surface.** The column's slope, altitude and nearby water pick one of the
+//!    surface rules (see `surface.rs`), which says what layers top the ground:
+//!    grass over dirt, sand under water and on beaches, gravel on steep slopes...
+//! 5. **Blocks.** Going down a column: air, then water down to the ground (if
+//!    any), then the rule's layers, then stone forever.
 //!
 //! Noise is deterministic: the same seed and position always give the same value,
 //! so chunks can be generated in any order, on any thread, and still line up at
@@ -47,8 +48,9 @@ use bevy::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
 
 use super::{
-    lakes::{CellSample, Lakes},
-    settings::{Fractal, WorldGenSettings},
+    lakes::{CellSample, Lakes, NO_WATER},
+    settings::{Fractal, SurfaceRule, WorldGenSettings},
+    surface::{self, Facts},
 };
 
 /// The terrain generator, built once from the settings. Cloning it is cheap (it
@@ -62,8 +64,14 @@ pub struct Terrain(Arc<TerrainInner>);
 
 /// What `Terrain` shares between tasks: the settings, with the noise built
 struct TerrainInner {
-    /// blocks, see `WorldGenSettings::dirt_depth`
-    dirt_depth: i32,
+    /// see `SurfaceSettings::rules`
+    surface: Vec<SurfaceRule>,
+    /// blocks: the thickest stack of layers any rule has. Below that, every
+    /// column is stone, whichever rule it follows
+    deepest_layers: i32,
+    /// see `SurfaceSettings::wobble`
+    wobble: Fbm<Perlin>,
+    wobble_height: f64,
     /// where water collects on land, see `lakes.rs`
     lakes: Lakes,
     /// continentalness, -1..1
@@ -97,9 +105,29 @@ pub struct Column {
     /// The y of the first block above any water. Blocks from `height` up to (not
     /// including) `water` are water; `water == height` means no water here
     pub water: i32,
-    /// Ground under water: topped with sand instead of grass
-    pub sea_floor: bool,
+    /// Which surface rule the column follows, as its index in
+    /// `SurfaceSettings::rules`. One past the end: none matched, bare stone
+    pub surface: usize,
 }
+
+/// A column before its surface is picked: what the noise and lakes say about it.
+/// Picking the surface needs the 4 neighbouring columns' too (for the slope)
+#[derive(Clone, Copy)]
+struct RawColumn {
+    /// ground height, metres, before rounding to blocks
+    metres: f64,
+    /// ground height and water top, in blocks, as in `Column`
+    height: i32,
+    water: i32,
+    /// metres: the water surface of this column's lake cell, or NO_WATER. Set even
+    /// where this column is dry ground above it: those are its shores
+    level: f32,
+    /// near enough the coast that the sea counts as nearby water
+    coastal: bool,
+}
+
+/// The 4 columns beside a column (east, west, south, north), as block offsets
+const NEIGHBOURS: [(i32, i32); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 
 /// Builds the `noise` crate's fBm from our `Fractal` settings
 fn fractal(settings: &Fractal, seed: u32) -> Fbm<Perlin> {
@@ -156,8 +184,21 @@ impl Terrain {
             })
             .collect();
         let continents = &settings.continents;
+        let surface = &settings.surface;
         Self(Arc::new(TerrainInner {
-            dirt_depth: settings.dirt_depth,
+            surface: surface.rules.clone(),
+            deepest_layers: surface
+                .rules
+                .iter()
+                .map(|rule| rule.layers.iter().map(|(_, thick)| thick).sum())
+                .max()
+                .unwrap_or(0),
+            // after the continents (seed) and every layer (seed + 1 ...)
+            wobble: fractal(
+                &surface.wobble.noise,
+                settings.seed.wrapping_add(settings.layers.len() as u32 + 1),
+            ),
+            wobble_height: surface.wobble.height,
             lakes: Lakes::new(&settings.lakes, settings.sea_level),
             continents: fractal(&continents.noise, settings.seed),
             shape: continents.shape.clone(),
@@ -194,7 +235,11 @@ impl Terrain {
             .filter(|layer| !(coarse && layer.scale < too_narrow))
             .map(|layer| {
                 let push = layer.noise.get([x, z]) * layer.height;
-                if layer.inland { push * land } else { push }
+                if layer.inland {
+                    push * land
+                } else {
+                    push
+                }
             })
             .sum();
         (base + pushes, continentalness)
@@ -219,14 +264,21 @@ impl Terrain {
         }
     }
 
-    /// The column of blocks at block `x`, `z`. Sampled at the column's centre
+    /// The column of blocks at block `x`, `z`
     pub fn column_at(&self, x: i32, z: i32) -> Column {
+        let neighbours = NEIGHBOURS.map(|(dx, dz)| self.raw_column(x + dx, z + dz));
+        self.finish_column(x, z, self.raw_column(x, z), neighbours)
+    }
+
+    /// Ground and water at block `x`, `z`, before the surface is picked. Sampled
+    /// at the column's centre
+    fn raw_column(&self, x: i32, z: i32) -> RawColumn {
         // Noise works in metres, so settings mean the same thing whatever the
         // block size. Block 3 spans 1.5..2.0 m; its centre is (3 + 0.5) * 0.5 = 1.75 m
         let x = (x as f64 + 0.5) * BLOCK_SIZE as f64;
         let z = (z as f64 + 0.5) * BLOCK_SIZE as f64;
 
-        let (metres, _) = self.ground(x, z, false);
+        let (metres, continentalness) = self.ground(x, z, false);
         // back to whole blocks: 9.55 m / 0.5 = 19.1, rounds to 19. So blocks up to
         // 18 are ground, 18 is the top one, and 19 (9.5 m) is the first air
         let height = (metres / BLOCK_SIZE as f64).round() as i32;
@@ -238,10 +290,55 @@ impl Terrain {
         // ground above that (height >= 6), there's no water: `water` = `height`
         let water = ((level as f64 / BLOCK_SIZE as f64).round() as i32).max(height);
 
-        Column {
+        RawColumn {
+            metres,
             height,
             water,
-            sea_floor: water > height,
+            level,
+            coastal: continentalness < self.0.inland,
+        }
+    }
+
+    /// Picks a column's surface rule from its facts (see `surface.rs`).
+    /// `neighbours` are the raw columns east, west, south and north of it, in the
+    /// order of `NEIGHBOURS`
+    fn finish_column(&self, x: i32, z: i32, raw: RawColumn, neighbours: [RawColumn; 4]) -> Column {
+        let [east, west, south, north] = neighbours;
+        // how much the ground rises across this column, between the neighbours on
+        // either side (2 blocks apart). e.g. east 1 m higher than west: 45 degrees
+        let slope = surface::slope_degrees(
+            east.metres - west.metres,
+            south.metres - north.metres,
+            2.0 * BLOCK_SIZE as f64,
+        );
+
+        // the nearest water surface around: this column's lake cell, the top of any
+        // neighbour's water, and the sea near the coast. Whichever is highest
+        let beside = neighbours
+            .iter()
+            .filter(|n| n.water > n.height)
+            .map(|n| n.water as f64 * BLOCK_SIZE as f64);
+        let cell = (raw.level != NO_WATER).then_some(raw.level as f64);
+        let sea = raw.coastal.then_some(self.0.lakes.sea_level() as f64);
+        let nearby = beside.chain(cell).chain(sea).reduce(f64::max);
+
+        // the wobble shifts the altitude rules see: see `SurfaceSettings::wobble`
+        let (mx, mz) = (
+            (x as f64 + 0.5) * BLOCK_SIZE as f64,
+            (z as f64 + 0.5) * BLOCK_SIZE as f64,
+        );
+        let wobble = self.0.wobble.get([mx, mz]) * self.0.wobble_height;
+
+        let facts = Facts {
+            altitude: raw.metres + wobble,
+            slope,
+            under_water: raw.water > raw.height,
+            above_water: nearby.map(|surface| raw.metres - surface),
+        };
+        Column {
+            height: raw.height,
+            water: raw.water,
+            surface: surface::pick(&self.0.surface, &facts),
         }
     }
 
@@ -287,20 +384,32 @@ impl Terrain {
     /// The block at height `y` in `column`
     fn block(&self, column: Column, y: i32) -> Block {
         // count down from the top block: it is depth 0, the one under it depth 1,
-        // and so on. Above the ground is negative.
-        // e.g. height 19, dirt_depth 3: y 19+ air, 18 grass, 17..=15 dirt, 14- stone
+        // and so on. Above the ground is negative
         let depth = column.height - 1 - y;
-        match depth {
+        if depth < 0 {
             // above the ground: water up to the column's water surface, then air.
             // e.g. height -6, water 0: blocks -6..=-1 are water, 0 and up air
-            ..0 if y < column.water => Block::WATER,
-            ..0 => Block::AIR,
-            // under water: sand where land would have grass and dirt
-            d if column.sea_floor && d <= self.0.dirt_depth => Block::SAND,
-            0 => Block::GRASS,
-            d if d <= self.0.dirt_depth => Block::DIRT,
-            _ => Block::STONE,
+            return if y < column.water {
+                Block::WATER
+            } else {
+                Block::AIR
+            };
         }
+        // walk down the rule's layers until one reaches this depth. e.g. layers
+        // grass 1, dirt 3: depth 0 grass, 1..=3 dirt, 4 and deeper stone
+        let layers = self
+            .0
+            .surface
+            .get(column.surface)
+            .map_or(&[][..], |rule| &rule.layers[..]);
+        let mut below = 0;
+        for &(block, thick) in layers {
+            below += thick;
+            if depth < below {
+                return block;
+            }
+        }
+        Block::STONE
     }
 
     /// All the blocks of one chunk. Runs on a background thread for every chunk
@@ -312,12 +421,29 @@ impl Terrain {
         let size = CHUNK_SIZE as usize;
 
         // Step 1: each of the chunk's 32 x 32 columns. Columns only depend on x
-        // and z, so each is sampled once here instead of once per block. Stored
-        // flat: column (x, z) is at x + z * 32
+        // and z, so each is sampled once here instead of once per block.
+        // Picking a column's surface needs its 4 neighbours (for the slope), so
+        // first sample a 34 x 34 ring of raw columns, one extra all round reaching
+        // into the next chunks. Stored flat: raw (x, z) is at (x + 1) + (z + 1) * 34
+        let padded = CHUNK_SIZE + 2;
+        let mut raw = Vec::with_capacity((padded * padded) as usize);
+        for z in -1..=CHUNK_SIZE {
+            for x in -1..=CHUNK_SIZE {
+                raw.push(self.raw_column(origin.x + x, origin.z + z));
+            }
+        }
+        let raw_at = |x: i32, z: i32| raw[((x + 1) + (z + 1) * padded) as usize];
+        // then the finished columns, stored flat: column (x, z) is at x + z * 32
         let mut columns = Vec::with_capacity(size * size);
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                columns.push(self.column_at(origin.x + x, origin.z + z));
+                let neighbours = NEIGHBOURS.map(|(dx, dz)| raw_at(x + dx, z + dz));
+                columns.push(self.finish_column(
+                    origin.x + x,
+                    origin.z + z,
+                    raw_at(x, z),
+                    neighbours,
+                ));
             }
         }
 
@@ -329,8 +455,8 @@ impl Terrain {
         //   ground and water     ground and all water
         //   bottom >= highest    no ground in the chunk, and it ends below every
         //   top < lowest water   column's water surface: all water
-        //   top below the dirt   every block is deeper than the grass and dirt (or
-        //   of the lowest column sand) of even the lowest column: all stone
+        //   top below the        every block is deeper than even the thickest
+        //   lowest layers        surface layers under the lowest ground: all stone
         //
         // Those become `Chunk::Uniform`: 1 byte, no per-block work.
         let lowest = columns.iter().map(|column| column.height).min().unwrap();
@@ -347,9 +473,9 @@ impl Terrain {
         if bottom >= highest && top < lowest_water {
             return Chunk::Uniform(Block::WATER);
         }
-        // the lowest column's top block is at `lowest - 1` and its dirt goes
-        // `dirt_depth` further down; anything below that is stone everywhere
-        if top < lowest - 1 - self.0.dirt_depth {
+        // the lowest column's top block is at `lowest - 1`, and no rule's layers go
+        // more than `deepest_layers` down from a top block
+        if top < lowest - self.0.deepest_layers {
             return Chunk::Uniform(Block::STONE);
         }
 
@@ -426,25 +552,35 @@ mod tests {
 
     #[test]
     fn columns_are_grass_then_dirt_then_stone() {
-        let terrain = Terrain::new(&WorldGenSettings::default());
+        // the default rules: 0 is under water (sand 4), the last is grass 1, dirt 3
+        let settings = WorldGenSettings::default();
+        let terrain = Terrain::new(&settings);
         let land = Column {
             height: 10,
             water: 10,
-            sea_floor: false,
+            surface: settings.surface.rules.len() - 1,
         };
         assert_eq!(terrain.block(land, 10), Block::AIR);
         assert_eq!(terrain.block(land, 9), Block::GRASS);
         assert_eq!(terrain.block(land, 6), Block::DIRT);
         assert_eq!(terrain.block(land, 5), Block::STONE);
 
-        let sea = Column {
+        let lake = Column {
             water: 12,
-            sea_floor: true,
+            surface: 0,
             ..land
         };
-        assert_eq!(terrain.block(sea, 9), Block::SAND);
-        assert_eq!(terrain.block(sea, 6), Block::SAND);
-        assert_eq!(terrain.block(sea, 5), Block::STONE);
+        assert_eq!(terrain.block(lake, 11), Block::WATER);
+        assert_eq!(terrain.block(lake, 9), Block::SAND);
+        assert_eq!(terrain.block(lake, 6), Block::SAND);
+        assert_eq!(terrain.block(lake, 5), Block::STONE);
+
+        // no rule matched: bare stone right to the top
+        let bare = Column {
+            surface: settings.surface.rules.len(),
+            ..land
+        };
+        assert_eq!(terrain.block(bare, 9), Block::STONE);
     }
 
     #[test]
@@ -466,10 +602,11 @@ mod tests {
     #[test]
     fn oceans_fill_to_sea_level() {
         let terrain = Terrain::new(&WorldGenSettings::default());
+        // rule 0 of the defaults: under water, 4 sand
         let deep = Column {
             height: -10,
             water: 0,
-            sea_floor: true,
+            surface: 0,
         };
         assert_eq!(terrain.block(deep, 0), Block::AIR);
         assert_eq!(terrain.block(deep, -1), Block::WATER);

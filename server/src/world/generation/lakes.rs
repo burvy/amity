@@ -121,6 +121,11 @@ impl Lakes {
         self.cell
     }
 
+    /// Metres: the ocean's surface
+    pub fn sea_level(&self) -> f32 {
+        self.sea_level
+    }
+
     /// The water level (metres) at (x, z) metres, or NO_WATER: the level of the
     /// cell containing the point. Inside a lake cell, only columns whose ground is
     /// below the level get water, so shorelines still follow the fine terrain.
