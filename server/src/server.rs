@@ -53,7 +53,12 @@ impl Plugin for ServerPlugin {
         );
         app.add_systems(
             FixedUpdate,
-            (logic::server_player_motion, logic::server_interact).chain(),
+            (
+                logic::server_player_motion,
+                shared::step_up::<With<protocol::PlayerMarker>>,
+                logic::server_interact,
+            )
+                .chain(),
         );
         app.add_systems(Update, (heartbeat, send_world, logic::receive_edits));
 

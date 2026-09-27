@@ -3,6 +3,9 @@ use bevy::{platform::collections::HashMap, prelude::*};
 use serde::{Deserialize, Serialize};
 
 pub const CHUNK_SIZE: i32 = 32;
+/// Edge length of one block in metres. Everything else in the voxel code counts in
+/// blocks; convert to metres only through `block_corner` and `block_at`.
+pub const BLOCK_SIZE: f32 = 0.5;
 const CHUNK_VOLUME: usize = (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -21,6 +24,16 @@ impl Block {
     }
 }
 
+/// World position in metres of a block's minimum corner
+pub fn block_corner(pos: IVec3) -> Vec3 {
+    pos.as_vec3() * BLOCK_SIZE
+}
+
+/// The block containing a world point in metres
+pub fn block_at(point: Vec3) -> IVec3 {
+    (point / BLOCK_SIZE).floor().as_ivec3()
+}
+
 /// world block = chunk * CHUNK_SIZE + local
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct ChunkPos(pub IVec3);
@@ -28,7 +41,7 @@ pub struct ChunkPos(pub IVec3);
 impl ChunkPos {
     /// world position of this chunk's (0, 0, 0) block corner
     pub fn origin(self) -> Vec3 {
-        (self.0 * CHUNK_SIZE).as_vec3()
+        block_corner(self.0 * CHUNK_SIZE)
     }
 
     /// splits a world block coordinate into its chunk and the local position inside it.
@@ -124,7 +137,7 @@ impl Chunk {
     /// bounding box around zero voxels
     pub fn collider(&self) -> Option<Collider> {
         let solid: Vec<IVec3> = self.solid().collect();
-        (!solid.is_empty()).then(|| Collider::voxels(Vec3::ONE, &solid))
+        (!solid.is_empty()).then(|| Collider::voxels(Vec3::splat(BLOCK_SIZE), &solid))
     }
 }
 

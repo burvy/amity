@@ -63,6 +63,10 @@ getrandom = { version = "0.4.3", features = ["wasm_js"] }
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 
+[build-dependencies]
+# build.rs packs assets/images/blocks/*.png into the block texture atlas
+png = "0.18"
+
 # Idiomatic Bevy code often triggers these lints, and the CI workflow treats them as errors.
 # In some cases they may still signal poor code quality however, so consider commenting out these lines.
 [lints.clippy]

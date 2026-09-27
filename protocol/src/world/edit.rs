@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     aim::{self, Aim},
-    world::chunk::{Block, Chunk, ChunkIndex, ChunkPos},
+    world::chunk::{block_at, block_corner, Block, Chunk, ChunkIndex, ChunkPos, BLOCK_SIZE},
 };
 
 /// How far a player can break and place blocks
@@ -86,8 +86,8 @@ impl EditTarget {
     /// inside the hit block or the one in front of it
     pub fn from_aim(aim: &Aim) -> Self {
         Self {
-            hit: (aim.point - aim.normal * 0.5).floor().as_ivec3(),
-            adjacent: (aim.point + aim.normal * 0.5).floor().as_ivec3(),
+            hit: block_at(aim.point - aim.normal * BLOCK_SIZE / 2.0),
+            adjacent: block_at(aim.point + aim.normal * BLOCK_SIZE / 2.0),
         }
     }
 }
@@ -127,8 +127,12 @@ pub fn player_edit(
 pub fn can_place(pos: IVec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
     let occupied = spatial
         .shape_intersections(
-            &Collider::cuboid(0.99, 0.99, 0.99),
-            pos.as_vec3() + Vec3::splat(0.5),
+            &Collider::cuboid(
+                BLOCK_SIZE * 0.99,
+                BLOCK_SIZE * 0.99,
+                BLOCK_SIZE * 0.99,
+            ),
+            block_corner(pos) + Vec3::splat(BLOCK_SIZE / 2.0),
             Quat::IDENTITY,
             &SpatialQueryFilter::default(),
         )
@@ -140,7 +144,7 @@ pub fn can_place(pos: IVec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
 /// The server's check of a client's `EditBlock`: within reach of where the server
 /// has the player, and a legal change of that block right now
 pub fn edit_allowed(edit: &EditBlock, eye: Vec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
-    let center = edit.pos.as_vec3() + Vec3::splat(0.5);
+    let center = block_corner(edit.pos) + Vec3::splat(BLOCK_SIZE / 2.0);
     if eye.distance(center) > REACH + REACH_TOLERANCE {
         return false;
     }
@@ -178,6 +182,14 @@ mod tests {
             ChunkPos::of_block(IVec3::splat(-CHUNK_SIZE)),
             (ChunkPos(IVec3::NEG_ONE), IVec3::ZERO)
         );
+    }
+
+    #[test]
+    fn metres_convert_to_blocks() {
+        use crate::world::chunk::{block_at, block_corner, BLOCK_SIZE};
+        assert_eq!(block_at(Vec3::new(-0.01, 0.0, BLOCK_SIZE - 0.01)), IVec3::new(-1, 0, 0));
+        assert_eq!(block_at(Vec3::splat(BLOCK_SIZE)), IVec3::ONE);
+        assert_eq!(block_at(block_corner(IVec3::new(-3, 7, 0))), IVec3::new(-3, 7, 0));
     }
 
     #[test]

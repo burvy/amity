@@ -57,7 +57,10 @@ impl Plugin for NetPlugin {
         );
 
         // Simulate players
-        app.add_systems(FixedUpdate, client_player_motion);
+        app.add_systems(
+            FixedUpdate,
+            (client_player_motion, shared::step_up::<With<Predicted>>).chain(),
+        );
     }
 }
 
