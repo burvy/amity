@@ -1,10 +1,13 @@
 use avian3d::dynamics::rigid_body::LinearVelocity;
 use avian3d::physics_transform::{Position, Rotation};
-use avian3d::spatial_query::{ShapeHits, SpatialQuery, SpatialQueryFilter};
+use avian3d::spatial_query::{ShapeHits, SpatialQuery};
 use bevy::prelude::*;
 use lightyear::core::timeline::LocalTimeline;
+use lightyear::connection::{client::Connected, client_of::ClientOf};
+use lightyear::prelude::MessageSender;
 use lightyear::prelude::input::native::ActionState;
-use shooter_protocol::{protocol, shared, stuff};
+use shooter_protocol::world::{chunk, edit};
+use shooter_protocol::{aim, protocol, shared, stuff};
 
 /// Simulates player movement on the server
 pub fn server_player_motion(
@@ -42,28 +45,48 @@ pub fn server_interact(
         if !action.0.interact {
             continue; // skip if not interacting
         }
-        // interaction
-        let rot = Quat::from_euler(EulerRot::YXZ, action.0.look.x, action.0.look.y, 0.0);
-        let Ok(dir) = Dir3::new(rot * Vec3::NEG_Z) else {
+        let Some(aim) = aim::aim(
+            &spatial,
+            player,
+            position.0,
+            action.0.look,
+            shared::INTERACT_DISTANCE,
+        ) else {
             continue;
         };
+        let Ok(mut interactable) = targets.get_mut(aim.entity) else {
+            continue;
+        };
+        if interactable.ready(tick) {
+            interactable.last_interacted = tick;
+            // logic to run upon interaction
+            info!(
+                "{} interacted with {} at distance {}",
+                player, aim.entity, aim.distance
+            );
+        }
+    }
+}
 
-        let origin = position.0 + Vec3::Y * shared::EYE_HEIGHT;
-        let filter = SpatialQueryFilter::from_excluded_entities([player]);
-
-        if let Some(hit) = spatial.cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter) {
-            let Ok(mut interactable) = targets.get_mut(hit.entity) else {
-                continue;
-            };
-            if interactable.ready(tick) {
-                interactable.last_interacted = tick;
-                // logic to run upon interaction
-                info!(
-                    "{} interacted with {} at distance {}",
-                    player, hit.entity, hit.distance
-                );
-            } else {
-                continue;
+/// Applies players' held break/place input and tells every client what changed
+pub fn server_edit_blocks(
+    spatial: SpatialQuery,
+    players: Query<
+        (Entity, &Position, &ActionState<protocol::PlayerInputs>),
+        With<protocol::PlayerMarker>,
+    >,
+    mut blocks: edit::Blocks,
+    mut clients: Query<&mut MessageSender<edit::BlockChanged>, (With<ClientOf>, With<Connected>)>,
+) {
+    for (player, position, action) in &players {
+        let Some((pos, block)) =
+            edit::player_edit(&action.0, player, position.0, &spatial, &blocks)
+        else {
+            continue;
+        };
+        if blocks.set(pos, block) {
+            for mut sender in &mut clients {
+                sender.send::<chunk::WorldChannel>(edit::BlockChanged { pos, block });
             }
         }
     }

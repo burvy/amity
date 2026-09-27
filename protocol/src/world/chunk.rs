@@ -120,19 +120,23 @@ impl Chunk {
             })
     }
 
-    /// avian3d collider for voxels
-    pub fn collider(&self) -> Collider {
-        Collider::voxels(Vec3::ONE, &self.solid().collect::<Vec<_>>())
+    /// avian3d collider for voxels. None for an all-air chunk: avian can't build a
+    /// bounding box around zero voxels
+    pub fn collider(&self) -> Option<Collider> {
+        let solid: Vec<IVec3> = self.solid().collect();
+        (!solid.is_empty()).then(|| Collider::voxels(Vec3::ONE, &solid))
     }
 }
 
 /// Agreed-upon chunk entity for both client and server
+/// The collider is added by `edit::sync_colliders`, since an all-air chunk has none.
+/// Transform is explicit because nothing else would add it to a chunk without a collider.
 pub fn chunk_body(pos: ChunkPos, chunk: Chunk) -> impl Bundle {
     (
         pos,
         Position(pos.origin()),
+        Transform::from_translation(pos.origin()),
         RigidBody::Static,
-        chunk.collider(),
         chunk,
     )
 }

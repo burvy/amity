@@ -53,7 +53,12 @@ impl Plugin for ServerPlugin {
         );
         app.add_systems(
             FixedUpdate,
-            (logic::server_player_motion, logic::server_interact).chain(),
+            (
+                logic::server_player_motion,
+                logic::server_interact,
+                logic::server_edit_blocks,
+            )
+                .chain(),
         );
         app.add_systems(Update, (heartbeat, send_world));
 
@@ -94,9 +99,12 @@ fn startup(mut cmds: Commands) -> Result {
 
     // world building
     for x in -1..=0 {
-        for z in -1..=0 {
-            let pos = ChunkPos(IVec3::new(x, -1, z));
-            cmds.spawn(chunk::chunk_body(pos, generation::generate(pos)));
+        for y in -1..=1 {
+            // adjust the y lower bound for the build limit in chunks
+            for z in -1..=0 {
+                let pos = ChunkPos(IVec3::new(x, y, z));
+                cmds.spawn(chunk::chunk_body(pos, generation::generate(pos)));
+            }
         }
     }
     cmds.spawn((
@@ -130,7 +138,7 @@ fn on_connect(
         // for player querying/identification
         protocol::PlayerMarker,
         // TODO: replace this spawnpoint with actual set spawn later on
-        Position(Vec3::new(0.0, 10.0, 0.0)), // clients will fall down (wont overlap usually)
+        Position(Vec3::new(0.0, shared::PLAYER_HALF_HEIGHT, 0.0)),
         // agreed-upon player body shape between client and server
         shared::PlayerBody::default(),
         // replicate for everyone

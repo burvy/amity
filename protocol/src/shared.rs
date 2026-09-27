@@ -11,6 +11,8 @@ pub const WALKSPEED: f32 = 3.0;
 /// Shared sprint speed multiplier
 pub const SPRINT_MUL: f32 = 1.5;
 
+pub const AIR_ACCEL: f32 = 1.0;
+
 /// Shared jump velocity to ensure client-server similarity
 pub const JUMP_VEL: f32 = 4.0;
 
@@ -76,18 +78,27 @@ pub fn apply_input(
     // TODO: Allow the camera to look around, but only rotate the body on yaw
     *rotation = Rotation(look_x);
 
-    if grounded {
-        // `PlayerInputs` is responsible for declaring which is forward
-        let motion = input.motion.clamp_length_max(1.0)
-            * WALKSPEED
-            * if input.sprint { SPRINT_MUL } else { 1.0 };
-        // quaternion operates on unit vector to rotate it
-        let vel_all = look_x * Vec3::new(motion.x, 0.0, motion.y);
-        velocity.0.x = vel_all.x;
-        velocity.0.z = vel_all.z;
+    // `PlayerInputs` is responsible for declaring which is forward
+    let speed = WALKSPEED * if input.sprint { SPRINT_MUL } else { 1.0 };
+    let wish =
+        look_x * Vec3::new(input.motion.x, 0.0, input.motion.y).clamp_length_max(1.0) * speed;
 
+    if grounded {
+        velocity.0.x = wish.x;
+        velocity.0.z = wish.z;
         if input.jump {
             velocity.0.y = JUMP_VEL;
         }
+    } else {
+        air_strafe(&mut velocity.0, wish);
     }
+}
+
+fn air_strafe(velocity: &mut Vec3, wish: Vec3) {
+    let Some(dir) = wish.try_normalize() else {
+        return;
+    };
+    let along = velocity.dot(dir);
+    let add = (wish.length() - along).clamp(0.0, AIR_ACCEL * protocol::TIMESTEP as f32);
+    *velocity += dir * add;
 }

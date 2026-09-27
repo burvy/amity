@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shooter_protocol::world::chunk::{Block, CHUNK_SIZE, Chunk, ChunkPos};
+use shooter_protocol::world::chunk::{Block, Chunk, ChunkPos, CHUNK_SIZE};
 
 /// Flat test terrain: the chunk layer at y = -1 is solid, so the ground's top
 /// face sits at world y = 0. Everything else is air.

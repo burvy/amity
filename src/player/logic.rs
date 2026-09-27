@@ -5,7 +5,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 use lightyear::prelude::*;
-use shooter_protocol::{shared, stuff};
+use shooter_protocol::{aim, shared, stuff};
 
 use crate::player::definition;
 
@@ -64,18 +64,15 @@ pub fn client_interaction_checker(
 ) {
     let (player, position) = player.into_inner();
 
-    let rot = Quat::from_euler(EulerRot::YXZ, player_info.look.x, player_info.look.y, 0.0);
-    let Ok(dir) = Dir3::new(rot * Vec3::NEG_Z) else {
-        return;
-    };
-
-    let origin = position.0 + Vec3::Y * shared::EYE_HEIGHT;
-    let filter = SpatialQueryFilter::from_excluded_entities([player]);
-
     let tick = timeline.tick();
-    let should_interact = spatial
-        .cast_ray(origin, dir, shared::INTERACT_DISTANCE, true, &filter)
-        .is_some_and(|hit| interactables.get(hit.entity).is_ok_and(|i| i.ready(tick)));
+    let should_interact = aim::aim(
+        &spatial,
+        player,
+        position.0,
+        player_info.look,
+        shared::INTERACT_DISTANCE,
+    )
+    .is_some_and(|aim| interactables.get(aim.entity).is_ok_and(|i| i.ready(tick)));
 
     if player_info.can_interact != should_interact {
         player_info.can_interact = should_interact

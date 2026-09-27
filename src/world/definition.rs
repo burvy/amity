@@ -1,10 +1,9 @@
-use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
 use lightyear::prelude::MessageReceiver;
 use shooter_protocol::{
     stuff,
-    world::{self, chunk},
+    world::chunk,
 };
 
 pub fn spawn_light(mut cmds: Commands) {
@@ -46,18 +45,4 @@ pub fn draw_interactables(
             MeshMaterial3d::<StandardMaterial>(mats.add(Color::srgb_u8(0, 128, 255))),
         ));
     }
-}
-
-/// Draw a debug grid (local only)
-pub fn draw_grid(mut gizmos: Gizmos) {
-    gizmos.grid(
-        Isometry3d::new(Vec3::new(
-            0.0,
-            world::definition::BASEPLATE_Y + world::definition::BASEPLATE_THICKNESS / 2.0 + 0.01,
-            0.0,
-        ), Quat::from_rotation_x(FRAC_PI_2)),
-        UVec2::splat(world::definition::BASEPLATE_LENGTH as u32),
-        Vec2::splat(1.0),
-        Color::srgb_u8(255, 0, 0),
-    );
 }
