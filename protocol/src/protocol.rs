@@ -61,6 +61,10 @@ impl Plugin for ProtocolPlugin {
         app.register_message::<chunk::ChunkData>()
             .add_direction(NetworkDirection::ServerToClient);
 
+        app.init_resource::<chunk::ChunkIndex>();
+        app.add_observer(chunk::index_chunk);
+        app.add_observer(chunk::unindex_chunk);
+
         // ---
         // Having gravity set to 0 here would be confusing.
         // to let the player fall, unlock translation_y in shared.rs
