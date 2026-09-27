@@ -3,26 +3,37 @@
 //!
 //! # How the ground is made
 //!
-//! 1. **Height per column.** Every (x, z) column of blocks gets one number, its
-//!    ground height: `base_height` plus the sum of every noise layer at that spot.
-//!    Noise is deterministic: the same seed and position always give the same
-//!    value, so chunks can be generated in any order, on any thread, and still
-//!    line up at their borders.
-//! 2. **Blocks from height.** Going down a column from the ground: one grass
-//!    block, `dirt_depth` dirt blocks, then stone forever. Above is air.
+//! 1. **Continentalness per column.** A very wide noise decides, for every (x, z)
+//!    column, how far inland it is: -1 deep ocean, 1 far inland. The
+//!    `Continents::shape` curve turns that into a base height.
+//! 2. **Hills on top.** Every noise layer adds its push up or down. `inland`
+//!    layers are faded by how far inland the column is, so they vanish at the
+//!    coast and sea floors stay smooth.
+//! 3. **Blocks from height.** Going down a column from the ground: one grass
+//!    block, `dirt_depth` dirt blocks, then stone forever. Above is air. Sea floors
+//!    (continentalness below the coast) get sand instead of grass and dirt.
+//!
+//! Noise is deterministic: the same seed and position always give the same value,
+//! so chunks can be generated in any order, on any thread, and still line up at
+//! their borders.
 //!
 //! Only height per column exists for now, so there are no overhangs or caves;
-//! those need 3D noise, which comes later.
+//! those need 3D noise, which comes later. Oceans are dry until water levels exist.
 //!
-//! # Fractal noise (fBm), per layer
+//! # Fractal noise (fBm)
 //!
 //! Perlin noise is a smooth random surface between -1 and 1. fBm adds several
 //! copies ("octaves"), each smaller and weaker than the last:
-//! The `noise` crate does the octave sum (`Fbm<Perlin>`); a layer then scales its
-//! -1..1 output by `height` metres.
-//! Essentially, a bunch of waves that get weaker, and all summed up to make cool terrain.
+//!
+//! The `noise` crate does the octave sum (`Fbm<Perlin>`). Continentalness uses it
+//! as is; a noise layer scales it by `height` metres.
+//!
+//! Adjust settings.rs, but the gist is:
+//! -1 Continentalness: deep ocean (deep in the negatives in height)
+//! 0 Continentalness: coast (0m in height)
+//! +1 Continentalness: deep inland (high in the positives in height)
 
-use std::sync::Arc;
+use std::{f32::consts::TAU, sync::Arc};
 
 use amity_protocol::world::{
     block::Block,
@@ -32,7 +43,7 @@ use amity_protocol::world::{
 use bevy::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
 
-use super::settings::{NoiseLayer, WorldGenSettings};
+use super::settings::{Fractal, WorldGenSettings};
 
 /// The terrain generator, built once from the settings. Cloning it is cheap (it
 /// is shared), so every background generation task gets its own handle.
@@ -45,44 +56,74 @@ pub struct Terrain(Arc<TerrainInner>);
 
 /// What `Terrain` shares between tasks: the settings, with the noise built
 struct TerrainInner {
-    /// metres, see `WorldGenSettings::base_height`
-    base_height: f64,
     /// blocks, see `WorldGenSettings::dirt_depth`
     dirt_depth: i32,
+    /// continentalness, -1..1
+    continents: Fbm<Perlin>,
+    /// see `Continents::shape`
+    shape: Vec<(f64, f64)>,
+    /// see `Continents::coast` and `Continents::inland`
+    coast: f64,
+    inland: f64,
     layers: Vec<Layer>,
 }
 
 /// A `NoiseLayer` with its noise built and ready to sample
 struct Layer {
-    /// fBm: `octaves` Perlin noises summed, each smaller and weaker than the
-    /// last. Returns roughly -1..1 for any point
+    /// returns roughly -1..1 for any point
     noise: Fbm<Perlin>,
     /// metres: what the -1..1 is multiplied by
     height: f64,
+    /// faded out toward the coast, see `NoiseLayer::inland`
+    inland: bool,
 }
 
-impl Layer {
-    fn new(settings: &NoiseLayer, seed: u32) -> Self {
-        Self {
-            // `new(seed)` makes the random tables the noise is built from. The
-            // `set_*` calls are the knobs from `NoiseLayer`
-            noise: Fbm::<Perlin>::new(seed)
-                .set_octaves(settings.octaves)
-                // Perlin noise has about one bump per 1.0 of input. Multiplying
-                // positions by 1 / scale means the input only moves 1.0 every
-                // `scale` metres, so bumps come out `scale` metres wide
-                .set_frequency(1.0 / settings.scale)
-                .set_persistence(settings.persistence)
-                .set_lacunarity(settings.lacunarity),
-            height: settings.height,
-        }
-    }
+/// What generation needs to know about one block column
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Column {
+    /// Ground height in blocks: the y of the first air block
+    pub height: i32,
+    /// Below the coast: topped with sand instead of grass
+    pub sea_floor: bool,
+}
 
-    /// Metres this layer moves the ground at (x, z) metres.
-    /// e.g. noise 0.4 with height 30 raises the ground 12 m; -0.4 lowers it 12 m
-    fn sample(&self, x: f64, z: f64) -> f64 {
-        self.noise.get([x, z]) * self.height
+/// Builds the `noise` crate's fBm from our `Fractal` settings
+fn fractal(settings: &Fractal, seed: u32) -> Fbm<Perlin> {
+    // `new(seed)` makes the random tables the noise is built from. The `set_*`
+    // calls are the knobs from `Fractal`
+    Fbm::<Perlin>::new(seed)
+        .set_octaves(settings.octaves)
+        // Perlin noise has about one bump per 1.0 of input. Multiplying positions
+        // by 1 / scale means the input only moves 1.0 every `scale` metres, so
+        // bumps come out `scale` metres wide
+        .set_frequency(1.0 / settings.scale)
+        .set_persistence(settings.persistence)
+        .set_lacunarity(settings.lacunarity)
+}
+
+/// Reads a curve given as sorted (x, y) points, joining them with straight
+/// lines. Past either end it stays at that end's y.
+/// e.g. points (0, 0) and (1, 10): x = 0.25 gives 2.5, x = 5 gives 10
+fn curve(points: &[(f64, f64)], x: f64) -> f64 {
+    let (first, last) = (points[0], points[points.len() - 1]);
+    if x <= first.0 {
+        return first.1;
     }
+    if x >= last.0 {
+        return last.1;
+    }
+    // the two points either side of x, and how far x is from the left one (0..1)
+    let right = points.iter().position(|point| point.0 >= x).unwrap();
+    let ((x0, y0), (x1, y1)) = (points[right - 1], points[right]);
+    let t = (x - x0) / (x1 - x0);
+    y0 + (y1 - y0) * t
+}
+
+/// 0 at `from`, 1 at `to`, easing in and out between (an S-curve, so hills don't
+/// start with a visible crease at the coast)
+fn smoothstep(from: f64, to: f64, x: f64) -> f64 {
+    let t = ((x - from) / (to - from)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 impl Terrain {
@@ -91,38 +132,69 @@ impl Terrain {
             .layers
             .iter()
             .enumerate()
-            // each layer gets its own seed (seed, seed + 1, ...): with the same
-            // seed, two layers would have their bumps in the same places
-            .map(|(i, layer)| Layer::new(layer, settings.seed.wrapping_add(i as u32)))
+            .map(|(i, layer)| Layer {
+                // each noise gets its own seed (continents: seed, layers: seed + 1,
+                // seed + 2, ...): with the same seed, their bumps would line up
+                noise: fractal(&layer.noise, settings.seed.wrapping_add(i as u32 + 1)),
+                height: layer.height,
+                inland: layer.inland,
+            })
             .collect();
+        let continents = &settings.continents;
         Self(Arc::new(TerrainInner {
-            base_height: settings.base_height,
             dirt_depth: settings.dirt_depth,
+            continents: fractal(&continents.noise, settings.seed),
+            shape: continents.shape.clone(),
+            coast: continents.coast,
+            inland: continents.inland,
             layers,
         }))
     }
 
-    /// Ground height of the block column at block `x`, `z`, in blocks: the y of
-    /// the first air block. Sampled at the column's centre
-    pub fn height_at(&self, x: i32, z: i32) -> i32 {
+    /// Continentalness at (x, z) metres: -1 deep ocean .. 1 far inland
+    fn continentalness(&self, x: f64, z: f64) -> f64 {
+        self.0.continents.get([x, z])
+    }
+
+    /// The column of blocks at block `x`, `z`. Sampled at the column's centre
+    pub fn column_at(&self, x: i32, z: i32) -> Column {
         // Noise works in metres, so settings mean the same thing whatever the
         // block size. Block 3 spans 1.5..2.0 m; its centre is (3 + 0.5) * 0.5 = 1.75 m
         let x = (x as f64 + 0.5) * BLOCK_SIZE as f64;
         let z = (z as f64 + 0.5) * BLOCK_SIZE as f64;
 
-        // every layer's push up or down, added onto the base height.
-        // e.g. base 0 + hills 12.3 + detail -0.6 = 11.7 m
-        let metres: f64 = self.0.base_height
-            + self
-                .0
-                .layers
-                .iter()
-                .map(|layer| layer.sample(x, z))
-                .sum::<f64>();
+        // how far inland this column is, and the base height that gives.
+        // e.g. continentalness 0.1 is lowland: base 4 m
+        let continentalness = self.continentalness(x, z);
+        let base = curve(&self.0.shape, continentalness);
 
-        // back to whole blocks: 11.7 m / 0.5 = 23.4, rounds to 23. So blocks 0..=22
-        // are ground, block 22 is the grass, and block 23 (11.5 m) is the first air
-        (metres / BLOCK_SIZE as f64).round() as i32
+        // how much of the `inland` layers applies here: 0 at the coast (and at
+        // sea), rising to 1 at `inland`. e.g. halfway between coast and inland: 0.5
+        let land = smoothstep(self.0.coast, self.0.inland, continentalness);
+
+        // every layer's push up or down, added onto the base.
+        // e.g. base 4 + hills 12.3 * land 0.5 + detail -0.6 = 9.55 m
+        let pushes: f64 = self
+            .0
+            .layers
+            .iter()
+            .map(|layer| {
+                let push = layer.noise.get([x, z]) * layer.height;
+                if layer.inland {
+                    push * land
+                } else {
+                    push
+                }
+            })
+            .sum();
+        let metres = base + pushes;
+
+        Column {
+            // back to whole blocks: 9.55 m / 0.5 = 19.1, rounds to 19. So blocks
+            // up to 18 are ground, 18 is the top one, and 19 (9.5 m) is the first air
+            height: (metres / BLOCK_SIZE as f64).round() as i32,
+            sea_floor: continentalness < self.0.coast,
+        }
     }
 
     /// The point on top of the ground above `xz` (metres)
@@ -131,18 +203,43 @@ impl Terrain {
         let x = (xz.x / BLOCK_SIZE).floor() as i32;
         let z = (xz.y / BLOCK_SIZE).floor() as i32;
         // the ground height in blocks is also where the first air block starts,
-        // so that height in metres is exactly the top of the grass
-        Vec3::new(xz.x, self.height_at(x, z) as f32 * BLOCK_SIZE, xz.y)
+        // so that height in metres is exactly the top of the ground
+        Vec3::new(xz.x, self.column_at(x, z).height as f32 * BLOCK_SIZE, xz.y)
     }
 
-    /// The block at height `y` in a column whose ground height is `height`
-    fn block(&self, height: i32, y: i32) -> Block {
-        // count down from the grass: the grass block is depth 0, the one under it
-        // depth 1, and so on. Above the grass is negative.
-        // e.g. height 23, dirt_depth 3: y 23+ air, 22 grass, 21..=19 dirt, 18- stone
-        let depth = height - 1 - y;
+    /// The nearest point to `from` (metres) that is on land, searching outward in
+    /// rings 64 m apart. Used for spawn, which shouldn't be at the bottom of an
+    /// ocean. Only if there's no land within 50 km does it give up and use `from`
+    pub fn nearest_land(&self, from: Vec2) -> Vec2 {
+        let on_land = |xz: Vec2| self.continentalness(xz.x as f64, xz.y as f64) > self.0.coast;
+        if on_land(from) {
+            return from;
+        }
+        for ring in 1..=800 {
+            let radius = ring as f32 * 64.0;
+            // more points on bigger rings, so they stay about 64 m apart
+            let points = (TAU * radius / 64.0) as usize;
+            for i in 0..points {
+                let angle = TAU * i as f32 / points as f32;
+                let xz = from + Vec2::from_angle(angle) * radius;
+                if on_land(xz) {
+                    return xz;
+                }
+            }
+        }
+        from
+    }
+
+    /// The block at height `y` in `column`
+    fn block(&self, column: Column, y: i32) -> Block {
+        // count down from the top block: it is depth 0, the one under it depth 1,
+        // and so on. Above the ground is negative.
+        // e.g. height 19, dirt_depth 3: y 19+ air, 18 grass, 17..=15 dirt, 14- stone
+        let depth = column.height - 1 - y;
         match depth {
             ..0 => Block::AIR,
+            // sea floors: sand where land would have grass and dirt
+            d if column.sea_floor && d <= self.0.dirt_depth => Block::SAND,
             0 => Block::GRASS,
             d if d <= self.0.dirt_depth => Block::DIRT,
             _ => Block::STONE,
@@ -157,13 +254,13 @@ impl Terrain {
         let origin = pos.0 * CHUNK_SIZE;
         let size = CHUNK_SIZE as usize;
 
-        // Step 1: the ground height of each of the chunk's 32 x 32 columns.
-        // Heights only depend on x and z, so each column is sampled once here
-        // instead of once per block. Stored flat: column (x, z) is at x + z * 32
-        let mut heights = vec![0; size * size];
+        // Step 1: each of the chunk's 32 x 32 columns. Columns only depend on x
+        // and z, so each is sampled once here instead of once per block. Stored
+        // flat: column (x, z) is at x + z * 32
+        let mut columns = Vec::with_capacity(size * size);
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                heights[(x + z * CHUNK_SIZE) as usize] = self.height_at(origin.x + x, origin.z + z);
+                columns.push(self.column_at(origin.x + x, origin.z + z));
             }
         }
 
@@ -173,18 +270,18 @@ impl Terrain {
         //
         //   bottom >= highest    every block is at or above every column's first
         //                        air block: all air
-        //   top below the dirt   every block is deeper than the grass and dirt of
-        //   of the lowest column even the lowest column: all stone
+        //   top below the dirt   every block is deeper than the grass and dirt (or
+        //   of the lowest column sand) of even the lowest column: all stone
         //
         // Those become `Chunk::Uniform`: 1 byte, no per-block work.
-        let lowest = *heights.iter().min().unwrap();
-        let highest = *heights.iter().max().unwrap();
+        let lowest = columns.iter().map(|column| column.height).min().unwrap();
+        let highest = columns.iter().map(|column| column.height).max().unwrap();
         let bottom = origin.y;
         let top = origin.y + CHUNK_SIZE - 1;
         if bottom >= highest {
             return Chunk::Uniform(Block::AIR);
         }
-        // the lowest column's grass is at `lowest - 1` and its dirt goes
+        // the lowest column's top block is at `lowest - 1` and its dirt goes
         // `dirt_depth` further down; anything below that is stone everywhere
         if top < lowest - 1 - self.0.dirt_depth {
             return Chunk::Uniform(Block::STONE);
@@ -195,10 +292,10 @@ impl Terrain {
         let mut chunk = Chunk::default();
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                let height = heights[(x + z * CHUNK_SIZE) as usize];
+                let column = columns[(x + z * CHUNK_SIZE) as usize];
                 for y in 0..CHUNK_SIZE {
                     // `y` is local to the chunk; `bottom + y` is the world height
-                    let block = self.block(height, bottom + y);
+                    let block = self.block(column, bottom + y);
                     if block != Block::AIR {
                         chunk.set(IVec3::new(x, y, z), block);
                     }
@@ -237,8 +334,8 @@ mod tests {
             ..settings
         });
         assert_ne!(
-            (-50..50).map(|x| a.height_at(x, 0)).collect::<Vec<_>>(),
-            (-50..50).map(|x| other.height_at(x, 0)).collect::<Vec<_>>()
+            (-50..50).map(|x| a.column_at(x, 0)).collect::<Vec<_>>(),
+            (-50..50).map(|x| other.column_at(x, 0)).collect::<Vec<_>>()
         );
     }
 
@@ -250,9 +347,9 @@ mod tests {
             let origin = pos.0 * CHUNK_SIZE;
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    let height = terrain.height_at(origin.x + x, origin.z + z);
+                    let column = terrain.column_at(origin.x + x, origin.z + z);
                     for y in 0..CHUNK_SIZE {
-                        let expected = terrain.block(height, origin.y + y);
+                        let expected = terrain.block(column, origin.y + y);
                         assert_eq!(chunk.get(IVec3::new(x, y, z)), expected);
                     }
                 }
@@ -263,10 +360,37 @@ mod tests {
     #[test]
     fn columns_are_grass_then_dirt_then_stone() {
         let terrain = Terrain::new(&WorldGenSettings::default());
-        let h = 10;
-        assert_eq!(terrain.block(h, h), Block::AIR);
-        assert_eq!(terrain.block(h, h - 1), Block::GRASS);
-        assert_eq!(terrain.block(h, h - 4), Block::DIRT);
-        assert_eq!(terrain.block(h, h - 5), Block::STONE);
+        let land = Column {
+            height: 10,
+            sea_floor: false,
+        };
+        assert_eq!(terrain.block(land, 10), Block::AIR);
+        assert_eq!(terrain.block(land, 9), Block::GRASS);
+        assert_eq!(terrain.block(land, 6), Block::DIRT);
+        assert_eq!(terrain.block(land, 5), Block::STONE);
+
+        let sea = Column {
+            sea_floor: true,
+            ..land
+        };
+        assert_eq!(terrain.block(sea, 9), Block::SAND);
+        assert_eq!(terrain.block(sea, 6), Block::SAND);
+        assert_eq!(terrain.block(sea, 5), Block::STONE);
+    }
+
+    #[test]
+    fn curve_joins_points_and_holds_its_ends() {
+        let points = [(-1.0, -10.0), (0.0, 0.0), (1.0, 30.0)];
+        assert_eq!(curve(&points, -5.0), -10.0);
+        assert_eq!(curve(&points, -0.5), -5.0);
+        assert_eq!(curve(&points, 0.5), 15.0);
+        assert_eq!(curve(&points, 5.0), 30.0);
+    }
+
+    #[test]
+    fn spawn_search_finds_land() {
+        let terrain = Terrain::new(&WorldGenSettings::default());
+        let land = terrain.nearest_land(Vec2::ZERO);
+        assert!(terrain.continentalness(land.x as f64, land.y as f64) > terrain.0.coast);
     }
 }

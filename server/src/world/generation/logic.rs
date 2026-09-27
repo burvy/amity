@@ -16,7 +16,7 @@ use super::{
     terrain::Terrain,
 };
 use crate::{
-    player::config::SPAWN_XZ,
+    player::definition::SpawnPoint,
     world::{area, streaming::config::VIEW_DISTANCE},
 };
 
@@ -31,6 +31,7 @@ pub struct Generating(HashMap<IVec3, Task<Chunk>>);
 /// remembers those so they aren't rechecked every tick.
 pub fn start_generating(
     terrain: Res<Terrain>,
+    spawn: Res<SpawnPoint>,
     mut generating: ResMut<Generating>,
     index: Res<ChunkIndex>,
     players: Query<&Position, With<PlayerMarker>>,
@@ -47,7 +48,7 @@ pub fn start_generating(
 
     // Anchors: the chunks to generate around. Spawn always comes first, so the
     // ground there exists before anyone joins; then each player's chunk
-    let anchors = iter::once(terrain.surface_point(SPAWN_XZ))
+    let anchors = iter::once(spawn.0)
         .chain(players.iter().map(|position| position.0))
         .map(|point| ChunkPos::containing(point).0);
 

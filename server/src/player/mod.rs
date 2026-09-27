@@ -9,6 +9,7 @@ use lightyear::input::server::{authorize_controlled_targets, InputValidationAppE
 use lightyear::prelude::input::native::NativeStateSequence;
 
 pub mod config;
+pub mod definition;
 mod logic;
 
 pub struct PlayerPlugin;

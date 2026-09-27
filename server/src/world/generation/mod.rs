@@ -9,6 +9,8 @@
 
 use bevy::prelude::*;
 
+use crate::player::{config::SPAWN_XZ, definition::SpawnPoint};
+
 pub mod config;
 mod logic;
 pub mod settings;
@@ -20,7 +22,11 @@ impl Plugin for GenerationPlugin {
     fn build(&self, app: &mut App) {
         // the generator is built from the settings once, not per chunk
         let settings = settings::WorldGenSettings::default();
-        app.insert_resource(terrain::Terrain::new(&settings));
+        let terrain = terrain::Terrain::new(&settings);
+        // spawn on land: the nearest to SPAWN_XZ, on top of the ground
+        let spawn = terrain.surface_point(terrain.nearest_land(SPAWN_XZ));
+        app.insert_resource(SpawnPoint(spawn));
+        app.insert_resource(terrain);
         app.insert_resource(settings);
         app.init_resource::<logic::Generating>();
         app.add_systems(

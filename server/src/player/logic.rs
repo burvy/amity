@@ -9,14 +9,13 @@ use lightyear::input::input_buffer::InputBuffer;
 use lightyear::prelude::input::native::ActionState;
 use lightyear::prelude::*;
 
-use super::config::{SPAWN_XZ, STALE_INPUT_TICKS};
-use crate::world::generation::terrain::Terrain;
+use super::{config::STALE_INPUT_TICKS, definition::SpawnPoint};
 
 /// Spawns a player for each newly connected client
 pub fn spawn_player(
     trigger: On<Add, Connected>,      // triggers when someone connected
     query: Query<(), With<ClientOf>>, // query `RemoteId`s that connected to us
-    terrain: Res<Terrain>,
+    spawn: Res<SpawnPoint>,
     mut cmds: Commands,
 ) {
     if !query.contains(trigger.entity) {
@@ -31,7 +30,7 @@ pub fn spawn_player(
         // for player querying/identification
         PlayerMarker,
         // standing on the ground: the body's centre is half its height up
-        Position(terrain.surface_point(SPAWN_XZ) + Vec3::Y * PLAYER_HALF_HEIGHT),
+        Position(spawn.0 + Vec3::Y * PLAYER_HALF_HEIGHT),
         // agreed-upon player body shape between client and server
         PlayerBody::default(),
         // replicate for everyone

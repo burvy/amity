@@ -17,4 +17,7 @@
     (name: "stone"),
     (name: "dirt"),
     (name: "grass"),
+    (name: "sand"),
+    (name: "gravel"),
+    (name: "snow"),
 ]
