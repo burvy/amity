@@ -53,7 +53,7 @@ pub struct ChunkMaterial(pub Handle<StandardMaterial>);
 
 pub fn init_chunk_material(mut cmds: Commands, mut mats: ResMut<Assets<StandardMaterial>>) {
     cmds.insert_resource(ChunkMaterial(mats.add(StandardMaterial {
-        perceptual_roughness: 1.0,
+        perceptual_roughness: 0.25,
         ..default()
     })));
 }
