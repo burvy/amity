@@ -4,6 +4,7 @@
 
 use bevy::prelude::*;
 
+pub mod inventory;
 pub mod net;
 pub mod physics;
 pub mod player;
@@ -17,6 +18,7 @@ impl Plugin for ProtocolPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             player::PlayerProtocolPlugin,
+            inventory::InventoryProtocolPlugin,
             stuff::StuffProtocolPlugin,
             world::WorldProtocolPlugin,
             physics::PhysicsProtocolPlugin,
