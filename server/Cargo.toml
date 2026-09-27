@@ -36,5 +36,7 @@ lightyear = { version = "0.28.0", default-features = false, features = [
     "interpolation",
 ]}
 tokio = { version = "1.53.1", features = ["rt"] }
+# world generation: fractal Perlin noise for terrain height
+noise = "0.9"
 # serde is not required as serialization happens in amity-protocol
 amity-protocol = { path = "../protocol"} # protocol shared with client

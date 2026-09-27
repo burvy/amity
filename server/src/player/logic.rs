@@ -1,4 +1,7 @@
-use amity_protocol::player::definition::{PlayerBody, PlayerInputs, PlayerMarker};
+use amity_protocol::player::{
+    config::PLAYER_HALF_HEIGHT,
+    definition::{PlayerBody, PlayerInputs, PlayerMarker},
+};
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use lightyear::connection::{client::Connected, client_of::ClientOf};
@@ -6,12 +9,14 @@ use lightyear::input::input_buffer::InputBuffer;
 use lightyear::prelude::input::native::ActionState;
 use lightyear::prelude::*;
 
-use super::config::{SPAWN_POINT, STALE_INPUT_TICKS};
+use super::config::{SPAWN_XZ, STALE_INPUT_TICKS};
+use crate::world::generation::terrain::Terrain;
 
 /// Spawns a player for each newly connected client
 pub fn spawn_player(
     trigger: On<Add, Connected>,      // triggers when someone connected
     query: Query<(), With<ClientOf>>, // query `RemoteId`s that connected to us
+    terrain: Res<Terrain>,
     mut cmds: Commands,
 ) {
     if !query.contains(trigger.entity) {
@@ -25,7 +30,8 @@ pub fn spawn_player(
     cmds.spawn((
         // for player querying/identification
         PlayerMarker,
-        Position(SPAWN_POINT),
+        // standing on the ground: the body's centre is half its height up
+        Position(terrain.surface_point(SPAWN_XZ) + Vec3::Y * PLAYER_HALF_HEIGHT),
         // agreed-upon player body shape between client and server
         PlayerBody::default(),
         // replicate for everyone

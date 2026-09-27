@@ -12,13 +12,16 @@ use bevy::prelude::*;
 pub mod config;
 mod logic;
 pub mod settings;
-mod terrain;
+pub mod terrain;
 
 pub struct GenerationPlugin;
 
 impl Plugin for GenerationPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<settings::WorldGenSettings>();
+        // the generator is built from the settings once, not per chunk
+        let settings = settings::WorldGenSettings::default();
+        app.insert_resource(terrain::Terrain::new(&settings));
+        app.insert_resource(settings);
         app.init_resource::<logic::Generating>();
         app.add_systems(
             FixedUpdate,

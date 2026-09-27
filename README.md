@@ -32,3 +32,7 @@ on the CLIENT
 ## Components
 Look at the basic `Interactable` component in `definition.rs` of `protocol/stuff`. Remember those traits, 
 since we need those to replicate over the protocol.
+
+## World Generation
+World generation only happens server side. The clients receive the chunks. It will never be 
+the clients trying to generate the same world as the server.
