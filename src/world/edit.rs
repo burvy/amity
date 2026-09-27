@@ -1,4 +1,5 @@
 use amity_protocol::{
+    inventory::definition::Hotbar,
     player::definition::PlayerInputs,
     world::{
         block::Block,
@@ -21,12 +22,19 @@ use super::chunks::IncomingChunks;
 /// same edit is re-sent each tick; the server rejects the duplicates harmlessly.
 pub fn request_edits(
     spatial: SpatialQuery,
-    player: Single<(Entity, &Position, &ActionState<PlayerInputs>), With<Controlled>>,
+    player: Single<
+        (Entity, &Position, &ActionState<PlayerInputs>, Option<&Hotbar>),
+        With<Controlled>,
+    >,
     blocks: Blocks,
     mut sender: Single<&mut MessageSender<EditBlock>>,
 ) {
-    let (player, position, action) = player.into_inner();
+    let (player, position, action, hotbar) = player.into_inner();
     let input = &action.0;
+    // the block the selected slot's item places, if it places one
+    let place = hotbar
+        .and_then(|hotbar| hotbar.get(input.slot as usize))
+        .and_then(|stack| stack.item.places());
     // break wins when both are held
     let edit_action = if input.primary {
         EditAction::Break
@@ -35,7 +43,8 @@ pub fn request_edits(
     } else {
         return;
     };
-    let Some((pos, block)) = player_edit(edit_action, player, position.0, input.look, &spatial, &blocks)
+    let Some((pos, block)) =
+        player_edit(edit_action, place, player, position.0, input.look, &spatial, &blocks)
     else {
         return;
     };

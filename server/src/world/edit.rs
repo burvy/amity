@@ -1,6 +1,14 @@
 use amity_protocol::{
-    player::{aim, definition::PlayerMarker},
+    inventory::{
+        definition::{GameMode, Hotbar},
+        item::Item,
+    },
+    player::{
+        aim,
+        definition::{PlayerInputs, PlayerMarker},
+    },
     world::{
+        block::Block,
         blocks::Blocks,
         chunk::ChunkPos,
         edit::edit_allowed,
@@ -10,16 +18,29 @@ use amity_protocol::{
 use avian3d::prelude::{Position, SpatialQuery};
 use bevy::prelude::*;
 use lightyear::connection::{client::Connected, client_of::ClientOf};
-use lightyear::prelude::{ControlledBy, MessageReceiver, MessageSender};
+use lightyear::prelude::{input::native::ActionState, ControlledBy, MessageReceiver, MessageSender};
 
 use super::streaming::logic::ChunkView;
 
 /// Checks and applies clients' block edits. Accepted edits go to every client
 /// that has the chunk; a rejected edit gets the real block sent back, so that
 /// client's view is corrected.
+///
+/// Placing needs the selected hotbar slot to hold the block's item; in survival
+/// it uses one up, and breaking puts the block's item in the hotbar (if there's
+/// room). Creative players place anything they've picked, endlessly.
 pub fn receive_edits(
     spatial: SpatialQuery,
-    players: Query<(&Position, &ControlledBy), With<PlayerMarker>>,
+    mut players: Query<
+        (
+            &Position,
+            &ControlledBy,
+            &GameMode,
+            &mut Hotbar,
+            &ActionState<PlayerInputs>,
+        ),
+        With<PlayerMarker>,
+    >,
     mut clients: Query<
         (
             Entity,
@@ -33,12 +54,34 @@ pub fn receive_edits(
 ) {
     let mut accepted = Vec::new();
     for (client, mut receiver, mut sender, _) in &mut clients {
-        let eye = players
-            .iter()
-            .find(|(_, controlled)| controlled.owner == client)
-            .map(|(position, _)| aim::eye(position.0));
+        let Some((position, _, mode, mut hotbar, action)) = players
+            .iter_mut()
+            .find(|(_, controlled, ..)| controlled.owner == client)
+        else {
+            receiver.receive().for_each(drop);
+            continue;
+        };
+        let eye = aim::eye(position.0);
+        let survival = *mode == GameMode::Survival;
+        let slot = action.0.slot as usize;
         for edit in receiver.receive() {
-            if eye.is_some_and(|eye| edit_allowed(&edit, eye, &spatial, &blocks)) {
+            let before = blocks.get(edit.pos);
+            // placing: the selected item must place this block
+            let holding = edit.block == Block::AIR
+                || hotbar
+                    .get(slot)
+                    .is_some_and(|stack| stack.item.places() == Some(edit.block));
+            if holding && edit_allowed(&edit, eye, &spatial, &blocks) {
+                if survival {
+                    if edit.block == Block::AIR {
+                        // what was broken goes in the hotbar, if there's room
+                        if let Some(item) = before.and_then(Item::of_block) {
+                            hotbar.add(item, 1);
+                        }
+                    } else {
+                        hotbar.take_one(slot);
+                    }
+                }
                 blocks.set(edit.pos, edit.block);
                 accepted.push(BlockChanged {
                     pos: edit.pos,

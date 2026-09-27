@@ -10,11 +10,11 @@ use bevy::prelude::*;
 
 use super::ReceiveWorld;
 
-mod material;
+pub(crate) mod material;
 mod mesher;
 mod padded;
 mod tasks;
-mod textures;
+pub(crate) mod textures;
 
 pub struct MeshingPlugin;
 

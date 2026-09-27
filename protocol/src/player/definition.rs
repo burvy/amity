@@ -31,6 +31,11 @@ pub struct PlayerInputs {
     /// A bool representing whether the player is holding the secondary action
     /// (right click: place, later use)
     pub secondary: bool,
+    /// Whether the player is holding crouch (C). While flying: move down
+    pub descend: bool,
+    /// The selected hotbar slot, 0..HOTBAR_SLOTS. Sent every tick like the rest,
+    /// since it's a state (which slot), not an event
+    pub slot: u8,
 }
 
 /// `MapEntities` exists to satisfy the `InputPlugin`'s trait bound.

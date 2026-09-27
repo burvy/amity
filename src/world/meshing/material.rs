@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
 };
 
-use super::textures::ATLAS;
+use super::textures::{atlas, ATLAS};
 
 /// Shared by every chunk. Both use the block texture atlas
 #[derive(Resource)]
@@ -15,10 +15,18 @@ pub struct ChunkMaterials {
     pub fluid: Handle<StandardMaterial>,
 }
 
+/// The block texture atlas, for UI icons: the image, and how it's cut into tiles
+#[derive(Resource)]
+pub struct BlockAtlas {
+    pub image: Handle<Image>,
+    pub layout: Handle<TextureAtlasLayout>,
+}
+
 pub fn init_chunk_material(
     mut cmds: Commands,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     // nearest sampling keeps the pixel art crisp instead of blurring it
     let atlas = Image::from_buffer(
@@ -31,6 +39,16 @@ pub fn init_chunk_material(
     )
     .expect("the atlas is generated at build time, so it must be a valid png");
     let atlas = images.add(atlas);
+    cmds.insert_resource(BlockAtlas {
+        image: atlas.clone(),
+        layout: layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(atlas::TILE_PIXELS),
+            atlas::COLUMNS,
+            atlas::ROWS,
+            None,
+            None,
+        )),
+    });
     cmds.insert_resource(ChunkMaterials {
         solid: mats.add(StandardMaterial {
             base_color_texture: Some(atlas.clone()),

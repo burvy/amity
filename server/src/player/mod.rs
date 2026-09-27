@@ -17,6 +17,8 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(logic::spawn_player);
+        // Update, not FixedUpdate: lightyear clears received messages every frame
+        app.add_systems(Update, logic::receive_actions);
 
         app.add_systems(
             FixedUpdate,

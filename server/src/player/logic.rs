@@ -1,6 +1,9 @@
-use amity_protocol::player::{
-    config::PLAYER_HALF_HEIGHT,
-    definition::{PlayerBody, PlayerInputs, PlayerMarker},
+use amity_protocol::{
+    inventory::definition::{Flying, GameMode, Hotbar, ItemStack, SetSlot, ToggleFlight},
+    player::{
+        config::PLAYER_HALF_HEIGHT,
+        definition::{PlayerBody, PlayerInputs, PlayerMarker},
+    },
 };
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
@@ -9,7 +12,10 @@ use lightyear::input::input_buffer::InputBuffer;
 use lightyear::prelude::input::native::ActionState;
 use lightyear::prelude::*;
 
-use super::{config::STALE_INPUT_TICKS, definition::SpawnPoint};
+use super::{
+    config::{DEFAULT_GAME_MODE, STALE_INPUT_TICKS, STARTING_HOTBAR},
+    definition::SpawnPoint,
+};
 
 /// Spawns a player for each newly connected client
 pub fn spawn_player(
@@ -33,6 +39,10 @@ pub fn spawn_player(
         Position(spawn.0 + Vec3::Y * PLAYER_HALF_HEIGHT),
         // agreed-upon player body shape between client and server
         PlayerBody::default(),
+        // how they play, what they hold, and whether they fly
+        DEFAULT_GAME_MODE,
+        starting_hotbar(),
+        Flying(false),
         // replicate for everyone
         Replicate::to_clients(NetworkTarget::All),
         // make all players predict
@@ -89,5 +99,59 @@ pub fn keep_players_replicating(
     for (mut position, mut velocity) in &mut players {
         position.set_changed();
         velocity.set_changed();
+    }
+}
+
+/// A full stack of each of `STARTING_HOTBAR`
+fn starting_hotbar() -> Hotbar {
+    let mut hotbar = Hotbar::default();
+    for item in STARTING_HOTBAR {
+        hotbar.add(item, item.max_stack());
+    }
+    hotbar
+}
+
+/// One-off actions from clients: filling hotbar slots from the creative block
+/// picker, and toggling flight. Both are creative only; anything else is ignored.
+/// Runs in Update: lightyear clears received messages every frame
+pub fn receive_actions(
+    mut clients: Query<
+        (
+            Entity,
+            &mut MessageReceiver<SetSlot>,
+            &mut MessageReceiver<ToggleFlight>,
+        ),
+        With<Connected>,
+    >,
+    mut players: Query<(&ControlledBy, &GameMode, &mut Hotbar, &mut Flying), With<PlayerMarker>>,
+) {
+    for (client, mut set_slots, mut toggles) in &mut clients {
+        let Some((_, mode, mut hotbar, mut flying)) = players
+            .iter_mut()
+            .find(|(controlled, ..)| controlled.owner == client)
+        else {
+            // no player yet: drop what arrived
+            set_slots.receive().for_each(drop);
+            toggles.receive().for_each(drop);
+            continue;
+        };
+        let creative = *mode == GameMode::Creative;
+        for SetSlot { slot, item } in set_slots.receive() {
+            if creative && slot < hotbar.slots.len() {
+                hotbar.slots[slot] = item.map(|item| ItemStack {
+                    item,
+                    count: item.max_stack(),
+                });
+            }
+        }
+        for ToggleFlight in toggles.receive() {
+            if creative {
+                flying.0 = !flying.0;
+            }
+        }
+        // only creative players fly
+        if !creative && flying.0 {
+            flying.0 = false;
+        }
     }
 }

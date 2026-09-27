@@ -7,7 +7,7 @@ use lightyear::core::timeline::is_in_rollback;
 mod chunks;
 mod definition;
 mod edit;
-mod meshing;
+pub(crate) mod meshing;
 
 /// The systems that apply what the server sent. Meshing runs after these
 #[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]

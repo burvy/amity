@@ -1,14 +1,23 @@
 //! Mouse and keyboard: pausing, looking, and the inputs sent to the server
 
-use amity_protocol::player::definition::PlayerInputs;
+use amity_protocol::{
+    inventory::{
+        config::HOTBAR_SLOTS,
+        definition::{ActionChannel, GameMode, ToggleFlight},
+    },
+    player::definition::PlayerInputs,
+};
 use bevy::{
-    input::mouse::AccumulatedMouseMotion,
+    input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
     prelude::*,
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
-use lightyear::prelude::input::native::{ActionState, InputMarker};
+use lightyear::prelude::{
+    input::native::{ActionState, InputMarker},
+    Controlled, MessageSender,
+};
 
-use super::definition::PlayerInfo;
+use super::{config::*, definition::PlayerInfo};
 
 /// Unlock on escape
 pub fn pause_on_esc(
@@ -29,7 +38,7 @@ pub fn grab_on_click(
     mut player_info: ResMut<PlayerInfo>,
     buttons: Res<ButtonInput<MouseButton>>,
 ) {
-    if player_info.paused && buttons.just_pressed(MouseButton::Left) {
+    if player_info.paused && !player_info.menu_open && buttons.just_pressed(MouseButton::Left) {
         player_info.paused = false;
         cursor_options.grab_mode = CursorGrabMode::Locked;
         cursor_options.visible = false;
@@ -63,23 +72,61 @@ pub fn buffer_input(
         return;
     }
 
-    // TODO: configurable inputs
-    let fwd = f32::from(keys.pressed(KeyCode::KeyW));
-    let bwd = f32::from(keys.pressed(KeyCode::KeyS));
-    let rwd = f32::from(keys.pressed(KeyCode::KeyD));
-    let lwd = f32::from(keys.pressed(KeyCode::KeyA));
-
+    let held = |key: KeyCode| f32::from(keys.pressed(key));
     action.0 = PlayerInputs {
         look: look_res.look,
         motion: Vec2 {
-            x: rwd - lwd,
-            y: bwd - fwd, // z motion is flipped in bevy
+            x: held(KEY_RIGHT) - held(KEY_LEFT),
+            y: held(KEY_BACK) - held(KEY_FORWARD), // z motion is flipped in bevy
         },
         // Hold spacebar to jump repeatedly
-        jump: keys.pressed(KeyCode::Space), // TODO: configurable inputs
-        sprint: keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight), // TODO: configurable inputs
-        interact: keys.pressed(KeyCode::KeyE), // TODO: configurable inputs
-        primary: mouse.pressed(MouseButton::Left), // TODO: configurable inputs
-        secondary: mouse.pressed(MouseButton::Right), // TODO: configurable inputs
+        jump: keys.pressed(KEY_JUMP),
+        sprint: keys.any_pressed(KEY_SPRINT),
+        interact: keys.pressed(KEY_INTERACT),
+        primary: mouse.pressed(BUTTON_PRIMARY),
+        secondary: mouse.pressed(BUTTON_SECONDARY),
+        descend: keys.pressed(KEY_CROUCH),
+        slot: look_res.slot,
     };
+}
+
+/// Picks the hotbar slot: its number key, or the scroll wheel (wrapping round)
+pub fn select_slot(
+    mut info: ResMut<PlayerInfo>,
+    keys: Res<ButtonInput<KeyCode>>,
+    scroll: Res<AccumulatedMouseScroll>,
+) {
+    if info.paused {
+        return;
+    }
+    if let Some(slot) = KEY_SLOTS.iter().position(|&key| keys.just_pressed(key)) {
+        info.slot = slot as u8;
+    }
+    let slots = HOTBAR_SLOTS as i32;
+    let step = -scroll.delta.y.signum() as i32;
+    if scroll.delta.y != 0.0 {
+        info.slot = (info.slot as i32 + step).rem_euclid(slots) as u8;
+    }
+}
+
+/// Double-tapping jump starts or stops flying, in creative. The server decides:
+/// the request goes as a reliable message, and `Flying` comes back replicated
+pub fn toggle_flight(
+    info: Res<PlayerInfo>,
+    keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    mode: Option<Single<&GameMode, With<Controlled>>>,
+    mut sender: Single<&mut MessageSender<ToggleFlight>>,
+    mut last_press: Local<Option<f32>>,
+) {
+    if info.paused || !keys.just_pressed(KEY_JUMP) {
+        return;
+    }
+    let now = time.elapsed_secs();
+    let double = last_press.is_some_and(|last| now - last <= DOUBLE_TAP_SECS);
+    // a double-tap uses both presses up; a third starts a new one
+    *last_press = if double { None } else { Some(now) };
+    if double && mode.is_some_and(|mode| **mode == GameMode::Creative) {
+        sender.send::<ActionChannel>(ToggleFlight);
+    }
 }

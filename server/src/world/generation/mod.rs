@@ -4,6 +4,7 @@
 //!
 //! - `settings.rs`: what the world looks like (tweak here)
 //! - `terrain.rs`: turns settings + a chunk position into blocks
+//! - `erosion.rs`: carves gullies and ridges into the hills (MPL-2.0, see file)
 //! - `lakes.rs`: where water collects on land, a region at a time
 //! - `surface.rs`: surface rules, what the top of the ground is made of
 //! - `config.rs`: how far ahead and how many at once
@@ -14,6 +15,7 @@ use bevy::prelude::*;
 use crate::player::{config::SPAWN_XZ, definition::SpawnPoint};
 
 pub mod config;
+mod erosion;
 mod lakes;
 mod logic;
 mod surface;

@@ -1,4 +1,4 @@
-//! Walking, sprinting, jumping and air strafing
+//! Walking, sprinting, jumping, air strafing and flying
 
 use avian3d::prelude::*;
 use bevy::{ecs::query::QueryFilter, prelude::*};
@@ -9,6 +9,10 @@ use super::{
     definition::PlayerInputs,
 };
 use crate::{
+    inventory::{
+        config::{FLY_SPEED, FLY_SPRINT_MUL},
+        definition::Flying,
+    },
     net::config::TIMESTEP,
     world::chunk::{ChunkIndex, ChunkPos},
 };
@@ -32,15 +36,18 @@ pub fn player_motion<F: QueryFilter + 'static>(
             &mut GravityScale,
             &ShapeHits,
             &ActionState<PlayerInputs>,
+            Option<&Flying>,
         ),
         F,
     >,
     index: Res<ChunkIndex>,
 ) {
-    for (position, mut rot, mut vel, mut gravity, hits, action) in &mut players {
+    for (position, mut rot, mut vel, mut gravity, hits, action, flying) in &mut players {
         let loaded = surroundings_loaded(&index, position.0);
-        // only write when it changes, so avian isn't told it changed every tick
-        let scale = if loaded { 1.0 } else { 0.0 };
+        let flying = flying.is_some_and(|flying| flying.0);
+        // no gravity while waiting for the world or flying. Only written when it
+        // changes, so avian isn't told it changed every tick
+        let scale = if loaded && !flying { 1.0 } else { 0.0 };
         if gravity.0 != scale {
             gravity.0 = scale;
         }
@@ -48,8 +55,23 @@ pub fn player_motion<F: QueryFilter + 'static>(
             vel.0 = Vec3::ZERO;
             continue;
         }
-        apply_input(&mut rot, &mut vel, &action.0, !hits.is_empty());
+        if flying {
+            fly(&mut rot, &mut vel, &action.0);
+        } else {
+            apply_input(&mut rot, &mut vel, &action.0, !hits.is_empty());
+        }
     }
+}
+
+/// Flying: move straight where the inputs say, no gravity, no momentum. Jump
+/// goes up, crouch goes down
+pub fn fly(rotation: &mut Rotation, velocity: &mut LinearVelocity, input: &PlayerInputs) {
+    let look_x = Quat::from_rotation_y(input.look.x);
+    *rotation = Rotation(look_x);
+    let speed = FLY_SPEED * if input.sprint { FLY_SPRINT_MUL } else { 1.0 };
+    let up = f32::from(input.jump) - f32::from(input.descend);
+    let wish = look_x * Vec3::new(input.motion.x, 0.0, input.motion.y).clamp_length_max(1.0);
+    velocity.0 = (wish + Vec3::Y * up) * speed;
 }
 
 /// Whether the chunk around `position` and all 26 chunks touching it exist, so

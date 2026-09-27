@@ -1,5 +1,3 @@
-use super::block::Block;
-
 /// Blocks along each edge of a chunk. A chunk is CHUNK_SIZE^3 blocks
 pub const CHUNK_SIZE: i32 = 32;
 /// Edge length of one block in metres. Everything else in the voxel code counts in
@@ -11,5 +9,3 @@ pub const REACH: f32 = 5.0;
 /// Extra distance the server allows when checking an edit: the aimed point can be
 /// up to ~0.87 from the block's center, plus the player may have moved since
 pub const REACH_TOLERANCE: f32 = 0.5;
-/// What gets placed until there is an inventory
-pub const PLACED_BLOCK: Block = Block::STONE;

@@ -59,7 +59,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use bevy::prelude::*;
+use bevy::{math::DVec2, prelude::*};
 
 use super::settings::LakeSettings;
 
@@ -71,7 +71,15 @@ const SUBCELL_SLACK: f32 = 2.0;
 /// highest of several cells' levels is simply `max`
 pub const NO_WATER: f32 = f32::NEG_INFINITY;
 
-/// What the flood needs to know about one coarse cell
+/// Samples the terrain for the lake grid, many points at once
+pub trait SampleGrid {
+    /// The `count` x `count` points `first + (i, j) * spacing` (metres), row by
+    /// row. Heights must be lower bounds: see `Lakes::compute`. Only points with
+    /// `i + j` even are used (cell corners and centres); the others may be skipped
+    fn sample_grid(&self, first: DVec2, spacing: f64, count: usize) -> Vec<CellSample>;
+}
+
+/// What the flood needs to know about one coarse cell, or one sample point
 #[derive(Clone, Copy)]
 pub struct CellSample {
     /// ground height, metres
@@ -124,8 +132,8 @@ impl Lakes {
     /// The water level (metres) at (x, z) metres, or NO_WATER: the level of the
     /// cell containing the point. Inside a lake cell, only columns whose ground is
     /// below the level get water, so shorelines still follow the fine terrain.
-    /// `sample` gives the terrain at a point, for computing regions not seen yet
-    pub fn level_at(&self, x: f64, z: f64, sample: &impl Fn(f64, f64) -> CellSample) -> f32 {
+    /// `sample` gives the terrain, for computing regions not seen yet
+    pub fn level_at(&self, x: f64, z: f64, sample: &impl SampleGrid) -> f32 {
         // cell (i, j) covers i * cell .. (i + 1) * cell along x, same for z
         let i = (x / self.cell).floor() as i32;
         let j = (z / self.cell).floor() as i32;
@@ -136,7 +144,7 @@ impl Lakes {
     /// The highest level any region's window gives this cell (see "Regions"). A
     /// cell deep inside its region is only in its own window; one within the
     /// margin of a border is also in the neighbouring regions' windows
-    fn cell_level(&self, cell: IVec2, sample: &impl Fn(f64, f64) -> CellSample) -> f32 {
+    fn cell_level(&self, cell: IVec2, sample: &impl SampleGrid) -> f32 {
         let home = cell.div_euclid(IVec2::splat(self.region_cells));
         let window = self.region_cells + 2 * self.margin_cells;
         let mut level = NO_WATER;
@@ -160,7 +168,7 @@ impl Lakes {
     fn region(
         &self,
         region: IVec2,
-        sample: &impl Fn(f64, f64) -> CellSample,
+        sample: &impl SampleGrid,
     ) -> Arc<OnceLock<Region>> {
         // hold the map's lock only to find (or add) the region's slot, never while
         // computing, so chunks in other regions aren't held up
@@ -176,41 +184,31 @@ impl Lakes {
     }
 
     /// Floods one region together with its margin
-    fn compute(&self, region: IVec2, sample: &impl Fn(f64, f64) -> CellSample) -> Region {
+    fn compute(&self, region: IVec2, sample: &impl SampleGrid) -> Region {
         // the window: the region plus `margin_cells` on every side
         let window = (self.region_cells + 2 * self.margin_cells) as usize;
         let first = region * self.region_cells - IVec2::splat(self.margin_cells);
 
         // Each cell's height must be a lower bound on the ground anywhere inside it
         // (see "No walls of water" above). The terrain is sampled at every cell's
-        // corners and centre, and a cell takes the lowest of those 5 values, minus
-        // SUBCELL_SLACK for dips between the sample points. (`sample` already
-        // lowers heights by the full size of the layers too narrow to sample.)
-        // Corners are shared by 4 cells, so they're sampled once, as a lattice
-        let corners_across = window + 1;
-        let mut corners = Vec::with_capacity(corners_across * corners_across);
-        for j in 0..=window as i32 {
-            for i in 0..=window as i32 {
-                let corner = first + IVec2::new(i, j);
-                corners
-                    .push(sample(corner.x as f64 * self.cell, corner.y as f64 * self.cell).height);
-            }
-        }
+        // corners (shared with its neighbours) and centre, which all lie on a grid
+        // half a cell apart, and a cell takes the lowest of those 5, minus
+        // SUBCELL_SLACK for dips between them. (`sample` already lowers heights by
+        // the most the details too fine to sample could.)
+        let across = 2 * window + 1;
+        let first_point = first.as_dvec2() * self.cell;
+        let points = sample.sample_grid(first_point, self.cell / 2.0, across);
         let mut cells = Vec::with_capacity(window * window);
         for j in 0..window {
             for i in 0..window {
-                let cell = first + IVec2::new(i as i32, j as i32);
-                let centre = sample(
-                    (cell.x as f64 + 0.5) * self.cell,
-                    (cell.y as f64 + 0.5) * self.cell,
-                );
-                let corner = |di: usize, dj: usize| corners[(i + di) + (j + dj) * corners_across];
-                let lowest = [corner(0, 0), corner(1, 0), corner(0, 1), corner(1, 1)]
+                let point = |di: usize, dj: usize| points[(2 * i + di) + (2 * j + dj) * across];
+                let lowest = [(0, 0), (2, 0), (0, 2), (2, 2), (1, 1)]
+                    .map(|(di, dj)| point(di, dj).height)
                     .into_iter()
-                    .fold(centre.height, f32::min);
+                    .fold(f32::INFINITY, f32::min);
                 cells.push(CellSample {
                     height: lowest - SUBCELL_SLACK,
-                    ocean: centre.ocean,
+                    ocean: point(1, 1).ocean,
                 });
             }
         }

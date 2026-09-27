@@ -3,6 +3,7 @@ use bevy::prelude::*;
 mod net;
 mod player;
 mod stuff;
+mod ui;
 mod world;
 
 // This section below allows the game to render on the web
@@ -35,6 +36,7 @@ impl Plugin for MainPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(player::PlayerPlugin);
         app.add_plugins(stuff::StuffPlugin);
+        app.add_plugins(ui::UiPlugin);
         app.add_plugins(world::WorldPlugin);
         app.add_plugins(net::NetPlugin);
         // brings physics with it, so the client can actually simulate

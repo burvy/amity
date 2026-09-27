@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use super::{
     block::{block_at, block_corner, Block},
     blocks::Blocks,
-    config::{BLOCK_SIZE, PLACED_BLOCK, REACH, REACH_TOLERANCE},
+    config::{BLOCK_SIZE, REACH, REACH_TOLERANCE},
     messages::EditBlock,
 };
 use crate::player::aim::{self, Aim};
@@ -37,9 +37,11 @@ pub enum EditAction {
     Place,
 }
 
-/// The block change an action aimed along `look` would make, if any
+/// The block change an action aimed along `look` would make, if any. `place` is
+/// the block the player's selected item places, if it places one
 pub fn player_edit(
     action: EditAction,
+    place: Option<Block>,
     player: Entity,
     position: Vec3,
     look: Vec2,
@@ -55,7 +57,8 @@ pub fn player_edit(
     match action {
         EditAction::Break => Some((target.hit, Block::AIR)),
         EditAction::Place => {
-            can_place(target.adjacent, spatial, blocks).then_some((target.adjacent, PLACED_BLOCK))
+            let block = place?;
+            can_place(target.adjacent, spatial, blocks).then_some((target.adjacent, block))
         }
     }
 }
@@ -85,7 +88,8 @@ pub fn can_place(pos: IVec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
 }
 
 /// The server's check of a client's `EditBlock`: within reach of where the server
-/// has the player, and a legal change of that block right now
+/// has the player, and a legal change of that block right now. Whether the player
+/// has the block to place is the inventory's check, done separately
 pub fn edit_allowed(edit: &EditBlock, eye: Vec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
     let center = block_corner(edit.pos) + Vec3::splat(BLOCK_SIZE / 2.0);
     if eye.distance(center) > REACH + REACH_TOLERANCE {
@@ -93,6 +97,6 @@ pub fn edit_allowed(edit: &EditBlock, eye: Vec3, spatial: &SpatialQuery, blocks:
     }
     match edit.block {
         Block::AIR => blocks.get(edit.pos).is_some_and(Block::is_solid),
-        block => block == PLACED_BLOCK && can_place(edit.pos, spatial, blocks),
+        _ => can_place(edit.pos, spatial, blocks),
     }
 }

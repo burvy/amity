@@ -4,7 +4,7 @@ use amity_protocol::player::{movement, step};
 use bevy::prelude::*;
 use lightyear::{input::client::InputSystems, prelude::Predicted};
 
-mod config;
+pub(crate) mod config;
 pub mod definition;
 mod input;
 mod interact;
@@ -15,9 +15,8 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(definition::PlayerInfo {
-            look: Vec2::ZERO,
             paused: true,
-            can_interact: false,
+            ..default()
         });
 
         app.add_systems(
@@ -40,6 +39,8 @@ impl Plugin for PlayerPlugin {
             (
                 grab_on_click,
                 input::pause_on_esc,
+                input::select_slot,
+                input::toggle_flight,
                 (input::rotate_player_resource, logic::camera_follow_player).chain(),
                 interact::client_interaction_checker,
                 interact::can_interact_prompt,

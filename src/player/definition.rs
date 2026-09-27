@@ -10,6 +10,11 @@ pub struct PlayerInfo {
     pub paused: bool,
     pub look: Vec2,
     pub can_interact: bool,
+    /// The selected hotbar slot, sent to the server with every input
+    pub slot: u8,
+    /// A menu (like the block picker) is open: the cursor is free, and clicking
+    /// doesn't grab it back
+    pub menu_open: bool,
 }
 
 impl PlayerInfo {
