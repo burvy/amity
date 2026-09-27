@@ -123,6 +123,10 @@ pub struct PlayerInputs {
     pub sprint: bool,
     /// A bool representing if the player is interacting
     pub interact: bool,
+    /// A bool representing whether the player is holding break
+    pub break_block: bool,
+    /// A bool representing whether the player is holding place
+    pub place_block: bool,
 }
 
 /// `MapEntities` exists to satisfy the `InputPlugin`'s trait bound.

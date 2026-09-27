@@ -157,6 +157,7 @@ fn buffer_input(
         With<InputMarker<protocol::PlayerInputs>>,
     >,
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     look_res: Res<player::definition::PlayerInfo>, // yaw/pitch stored in resource
 ) {
     if look_res.paused {
@@ -183,6 +184,8 @@ fn buffer_input(
         jump: keys.pressed(KeyCode::Space), // TODO: configurable inputs
         sprint: keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight), // TODO: configurable inputs
         interact: keys.pressed(KeyCode::KeyE), // TODO: configurable inputs
+        break_block: mouse.pressed(MouseButton::Left), // TODO: configurable inputs
+        place_block: mouse.pressed(MouseButton::Right), // TODO: configurable inputs
     };
 }
 
