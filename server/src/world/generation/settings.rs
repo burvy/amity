@@ -94,11 +94,10 @@ impl Default for WorldGenSettings {
                     SurfaceRule {
                         when: When {
                             under_water: Some(false),
-                            above_water: Some((0.0, 1.5)),
-                            altitude: (f64::MIN, 4.0),
+                            above_water: Some((-2.0, 2.0)),
                             ..Default::default()
                         },
-                        layers: vec![(Block::SAND, 3)],
+                        layers: vec![(Block::SAND, 4)],
                     },
                     // cliffs: too steep for anything to stay, so bare stone
                     SurfaceRule {
@@ -139,6 +138,7 @@ impl Default for WorldGenSettings {
                     },
                     height: 6.0,
                 },
+                shore_reach: 4,
             },
         }
     }
@@ -155,6 +155,10 @@ pub struct SurfaceSettings {
     /// Shifts the altitude the rules see by a little noise, so an altitude line
     /// like the snowline wanders across the land instead of being perfectly flat
     pub wobble: Wobble,
+    /// Blocks: how far from a column `When::above_water` looks for water. Only
+    /// water actually standing in a column counts, so beaches only form beside
+    /// water you can see. Wider beaches, but more columns sampled per chunk
+    pub shore_reach: i32,
 }
 
 /// One surface rule: where it applies, and what it puts there
@@ -178,9 +182,8 @@ pub struct When {
     pub slope: (f64, f64),
     /// Some(true): only under water. Some(false): only dry. None: either
     pub under_water: Option<bool>,
-    /// Only where there's water around (in this column's lake cell, a
-    /// neighbouring column, or the sea near the coast), and the ground is this many
-    /// metres above its surface. Good for beaches and shores
+    /// Only where water stands within `SurfaceSettings::shore_reach` blocks, and
+    /// the ground is this many metres above its surface. Good for beaches and shores
     pub above_water: Option<(f64, f64)>,
 }
 

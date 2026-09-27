@@ -48,7 +48,7 @@ use bevy::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
 
 use super::{
-    lakes::{CellSample, Lakes, NO_WATER},
+    lakes::{CellSample, Lakes},
     settings::{Fractal, SurfaceRule, WorldGenSettings},
     surface::{self, Facts},
 };
@@ -72,6 +72,8 @@ struct TerrainInner {
     /// see `SurfaceSettings::wobble`
     wobble: Fbm<Perlin>,
     wobble_height: f64,
+    /// blocks, see `SurfaceSettings::shore_reach`
+    shore_reach: i32,
     /// where water collects on land, see `lakes.rs`
     lakes: Lakes,
     /// continentalness, -1..1
@@ -119,11 +121,13 @@ struct RawColumn {
     /// ground height and water top, in blocks, as in `Column`
     height: i32,
     water: i32,
-    /// metres: the water surface of this column's lake cell, or NO_WATER. Set even
-    /// where this column is dry ground above it: those are its shores
-    level: f32,
-    /// near enough the coast that the sea counts as nearby water
-    coastal: bool,
+}
+
+impl RawColumn {
+    /// The top of the water standing in this column, in blocks, if any
+    fn water_top(&self) -> Option<i32> {
+        (self.water > self.height).then_some(self.water)
+    }
 }
 
 /// The 4 columns beside a column (east, west, south, north), as block offsets
@@ -199,6 +203,7 @@ impl Terrain {
                 settings.seed.wrapping_add(settings.layers.len() as u32 + 1),
             ),
             wobble_height: surface.wobble.height,
+            shore_reach: surface.shore_reach.max(0),
             lakes: Lakes::new(&settings.lakes, settings.sea_level),
             continents: fractal(&continents.noise, settings.seed),
             shape: continents.shape.clone(),
@@ -267,7 +272,13 @@ impl Terrain {
     /// The column of blocks at block `x`, `z`
     pub fn column_at(&self, x: i32, z: i32) -> Column {
         let neighbours = NEIGHBOURS.map(|(dx, dz)| self.raw_column(x + dx, z + dz));
-        self.finish_column(x, z, self.raw_column(x, z), neighbours)
+        // the highest water standing within `shore_reach` blocks
+        let reach = self.0.shore_reach;
+        let nearby = (-reach..=reach)
+            .flat_map(|dz| (-reach..=reach).map(move |dx| (dx, dz)))
+            .filter_map(|(dx, dz)| self.raw_column(x + dx, z + dz).water_top())
+            .max();
+        self.finish_column(x, z, self.raw_column(x, z), neighbours, nearby)
     }
 
     /// Ground and water at block `x`, `z`, before the surface is picked. Sampled
@@ -278,7 +289,7 @@ impl Terrain {
         let x = (x as f64 + 0.5) * BLOCK_SIZE as f64;
         let z = (z as f64 + 0.5) * BLOCK_SIZE as f64;
 
-        let (metres, continentalness) = self.ground(x, z, false);
+        let (metres, _) = self.ground(x, z, false);
         // back to whole blocks: 9.55 m / 0.5 = 19.1, rounds to 19. So blocks up to
         // 18 are ground, 18 is the top one, and 19 (9.5 m) is the first air
         let height = (metres / BLOCK_SIZE as f64).round() as i32;
@@ -294,15 +305,21 @@ impl Terrain {
             metres,
             height,
             water,
-            level,
-            coastal: continentalness < self.0.inland,
         }
     }
 
     /// Picks a column's surface rule from its facts (see `surface.rs`).
     /// `neighbours` are the raw columns east, west, south and north of it, in the
-    /// order of `NEIGHBOURS`
-    fn finish_column(&self, x: i32, z: i32, raw: RawColumn, neighbours: [RawColumn; 4]) -> Column {
+    /// order of `NEIGHBOURS`. `nearby_water` is the top (in blocks) of the highest
+    /// water standing within `shore_reach` blocks, if there is any
+    fn finish_column(
+        &self,
+        x: i32,
+        z: i32,
+        raw: RawColumn,
+        neighbours: [RawColumn; 4],
+        nearby_water: Option<i32>,
+    ) -> Column {
         let [east, west, south, north] = neighbours;
         // how much the ground rises across this column, between the neighbours on
         // either side (2 blocks apart). e.g. east 1 m higher than west: 45 degrees
@@ -312,15 +329,8 @@ impl Terrain {
             2.0 * BLOCK_SIZE as f64,
         );
 
-        // the nearest water surface around: this column's lake cell, the top of any
-        // neighbour's water, and the sea near the coast. Whichever is highest
-        let beside = neighbours
-            .iter()
-            .filter(|n| n.water > n.height)
-            .map(|n| n.water as f64 * BLOCK_SIZE as f64);
-        let cell = (raw.level != NO_WATER).then_some(raw.level as f64);
-        let sea = raw.coastal.then_some(self.0.lakes.sea_level() as f64);
-        let nearby = beside.chain(cell).chain(sea).reduce(f64::max);
+        // metres: the surface of the water nearby, if any
+        let nearby = nearby_water.map(|top| top as f64 * BLOCK_SIZE as f64);
 
         // the wobble shifts the altitude rules see: see `SurfaceSettings::wobble`
         let (mx, mz) = (
@@ -349,7 +359,7 @@ impl Terrain {
         let z = (xz.y / BLOCK_SIZE).floor() as i32;
         // the ground height in blocks is also where the first air block starts,
         // so that height in metres is exactly the top of the ground
-        Vec3::new(xz.x, self.column_at(x, z).height as f32 * BLOCK_SIZE, xz.y)
+        Vec3::new(xz.x, self.raw_column(x, z).height as f32 * BLOCK_SIZE, xz.y)
     }
 
     /// The nearest point to `from` (metres) that is dry land, searching outward in
@@ -360,8 +370,7 @@ impl Terrain {
         let on_land = |xz: Vec2| {
             let x = (xz.x / BLOCK_SIZE).floor() as i32;
             let z = (xz.y / BLOCK_SIZE).floor() as i32;
-            let column = self.column_at(x, z);
-            column.water == column.height
+            self.raw_column(x, z).water_top().is_none()
         };
         if on_land(from) {
             return from;
@@ -422,27 +431,36 @@ impl Terrain {
 
         // Step 1: each of the chunk's 32 x 32 columns. Columns only depend on x
         // and z, so each is sampled once here instead of once per block.
-        // Picking a column's surface needs its 4 neighbours (for the slope), so
-        // first sample a 34 x 34 ring of raw columns, one extra all round reaching
-        // into the next chunks. Stored flat: raw (x, z) is at (x + 1) + (z + 1) * 34
-        let padded = CHUNK_SIZE + 2;
+        // Picking a column's surface needs the columns around it (its 4 neighbours
+        // for the slope, any water within `shore_reach` for beaches), so first
+        // sample raw columns in a border `pad` wide all round, reaching into the
+        // next chunks. Stored flat: raw (x, z) is at (x + pad) + (z + pad) * padded
+        let pad = self.0.shore_reach.max(1);
+        let padded = CHUNK_SIZE + 2 * pad;
         let mut raw = Vec::with_capacity((padded * padded) as usize);
-        for z in -1..=CHUNK_SIZE {
-            for x in -1..=CHUNK_SIZE {
+        for z in -pad..CHUNK_SIZE + pad {
+            for x in -pad..CHUNK_SIZE + pad {
                 raw.push(self.raw_column(origin.x + x, origin.z + z));
             }
         }
-        let raw_at = |x: i32, z: i32| raw[((x + 1) + (z + 1) * padded) as usize];
+        let raw_at = |x: i32, z: i32| raw[((x + pad) + (z + pad) * padded) as usize];
+        let reach = self.0.shore_reach;
         // then the finished columns, stored flat: column (x, z) is at x + z * 32
         let mut columns = Vec::with_capacity(size * size);
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 let neighbours = NEIGHBOURS.map(|(dx, dz)| raw_at(x + dx, z + dz));
+                // the highest water standing within `shore_reach` blocks
+                let nearby = (-reach..=reach)
+                    .flat_map(|dz| (-reach..=reach).map(move |dx| (dx, dz)))
+                    .filter_map(|(dx, dz)| raw_at(x + dx, z + dz).water_top())
+                    .max();
                 columns.push(self.finish_column(
                     origin.x + x,
                     origin.z + z,
                     raw_at(x, z),
                     neighbours,
+                    nearby,
                 ));
             }
         }
