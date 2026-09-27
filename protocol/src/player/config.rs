@@ -9,7 +9,7 @@ pub const SPRINT_MUL: f32 = 1.5;
 pub const AIR_ACCEL: f32 = 1.0;
 
 /// Shared jump velocity to ensure client-server similarity
-pub const JUMP_VEL: f32 = 4.5;
+pub const JUMP_VEL: f32 = 3.0;
 
 /// Shared player radius for simulation similarity
 pub const PLAYER_RADIUS: f32 = 0.3;
