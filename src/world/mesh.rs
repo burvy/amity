@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter};
+use std::collections::{HashMap, HashSet};
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -7,8 +7,9 @@ use bevy::{
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, futures::check_ready},
 };
-use shooter_protocol::world::chunk::{
-    Block, BLOCK_SIZE, CHUNK_SIZE, Chunk, ChunkIndex, ChunkPos,
+use shooter_protocol::world::{
+    chunk::{Block, BLOCK_SIZE, CHUNK_SIZE, Chunk, ChunkIndex, ChunkPos},
+    edit::BlockSet,
 };
 
 /// One side of a unit block. Corners are counter-clockwise seen from outside
@@ -96,14 +97,33 @@ pub struct MeshTask(Task<Mesh>);
 /// faces may now be hidden or exposed.
 pub fn mark_dirty(
     mut cmds: Commands,
-    changed: Query<&ChunkPos, Changed<Chunk>>,
+    added: Query<&ChunkPos, Added<Chunk>>,
+    positions: Query<&ChunkPos>,
+    mut changes: MessageReader<BlockSet>,
     index: Res<ChunkIndex>,
 ) {
-    for pos in &changed {
-        for offset in iter::once(IVec3::ZERO).chain(FACES.iter().map(|face| face.normal)) {
-            if let Some(entity) = index.get(ChunkPos(pos.0 + offset)) {
-                cmds.entity(entity).insert(NeedsMesh);
+    let mut dirty = HashSet::new();
+    // a new chunk can hide or expose the border faces of all six neighbours
+    for pos in &added {
+        dirty.insert(pos.0);
+        dirty.extend(FACES.iter().map(|face| pos.0 + face.normal));
+    }
+    // an edited block only affects a neighbour if it sits on the face they share
+    for change in changes.read() {
+        let Ok(pos) = positions.get(change.chunk) else {
+            continue;
+        };
+        dirty.insert(pos.0);
+        for face in &FACES {
+            let beyond = change.local + face.normal;
+            if beyond.cmplt(IVec3::ZERO).any() || beyond.cmpge(IVec3::splat(CHUNK_SIZE)).any() {
+                dirty.insert(pos.0 + face.normal);
             }
+        }
+    }
+    for pos in dirty {
+        if let Some(entity) = index.get(ChunkPos(pos)) {
+            cmds.entity(entity).insert(NeedsMesh);
         }
     }
 }
@@ -167,21 +187,34 @@ impl PaddedChunk {
     /// `neighbour` returns the chunk at a chunk offset such as `IVec3::X`, if it is
     /// loaded. Missing neighbours count as air, so their border faces are drawn
     /// until they arrive and trigger a remesh.
+    /// Edges and corners of the border stay air: face culling never looks diagonally.
     pub fn new<'a>(center: &Chunk, neighbour: impl Fn(IVec3) -> Option<&'a Chunk>) -> Self {
         let mut blocks = vec![Block::Air; (PADDED_SIZE * PADDED_SIZE * PADDED_SIZE) as usize];
-        for y in -1..=CHUNK_SIZE {
-            for z in -1..=CHUNK_SIZE {
-                for x in -1..=CHUNK_SIZE {
-                    let p = IVec3::new(x, y, z);
-                    let (offset, local) = ChunkPos::of_block(p);
-                    blocks[Self::index(p)] = match offset.0 {
-                        IVec3::ZERO => center.get(local),
-                        // edges and corners stay air: face culling never looks diagonally
-                        o if o.abs().element_sum() == 1 => {
-                            neighbour(o).map_or(Block::Air, |chunk| chunk.get(local))
-                        }
-                        _ => Block::Air,
+        // interior: rows are contiguous in both layouts, so copy 32 blocks at a time
+        for y in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                let start = Self::index(IVec3::new(0, y, z));
+                blocks[start..start + CHUNK_SIZE as usize].copy_from_slice(center.row(y, z));
+            }
+        }
+        // border: one layer from each face neighbour, looked up once per face
+        for face in &FACES {
+            let Some(neighbour) = neighbour(face.normal) else {
+                continue;
+            };
+            let edge = if face.normal.max_element() > 0 { CHUNK_SIZE } else { -1 };
+            for i in 0..CHUNK_SIZE {
+                for j in 0..CHUNK_SIZE {
+                    let padded = if face.normal.x != 0 {
+                        IVec3::new(edge, i, j)
+                    } else if face.normal.y != 0 {
+                        IVec3::new(i, edge, j)
+                    } else {
+                        IVec3::new(i, j, edge)
                     };
+                    // -1 wraps to the neighbour's last layer, CHUNK_SIZE to its first
+                    let local = padded.rem_euclid(IVec3::splat(CHUNK_SIZE));
+                    blocks[Self::index(padded)] = neighbour.get(local);
                 }
             }
         }
@@ -344,6 +377,22 @@ mod tests {
         chunk.set(IVec3::X, Block::Stone);
         let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
         assert_eq!(mesh.count_vertices(), 10 * 4);
+    }
+
+    #[test]
+    fn every_neighbour_hides_its_shared_face() {
+        for face in &FACES {
+            // a block against this face of the chunk, and one just across it
+            let inside = (face.normal + IVec3::ONE) * (CHUNK_SIZE - 1) / 2;
+            let across = inside + face.normal - face.normal * CHUNK_SIZE;
+            let mut chunk = Chunk::default();
+            chunk.set(inside, Block::Stone);
+            let mut other = Chunk::default();
+            other.set(across, Block::Stone);
+
+            let padded = PaddedChunk::new(&chunk, |o| (o == face.normal).then_some(&other));
+            assert_eq!(chunk_mesh(&padded).count_vertices(), 5 * 4, "{:?}", face.normal);
+        }
     }
 
     #[test]

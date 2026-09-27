@@ -114,6 +114,17 @@ impl Chunk {
         self.blocks[Self::index(local)]
     }
 
+    /// The CHUNK_SIZE blocks along x at height `y`, depth `z`. They sit next to each
+    /// other in memory, so whole rows can be copied at once
+    pub fn row(&self, y: i32, z: i32) -> &[Block] {
+        let start = Self::index(IVec3::new(0, y, z));
+        &self.blocks[start..start + CHUNK_SIZE as usize]
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.blocks.iter().all(|block| !block.is_solid())
+    }
+
     /// sets the block at the block at index x, y, z
     pub fn set(&mut self, local: IVec3, block: Block) {
         self.blocks[Self::index(local)] = block;

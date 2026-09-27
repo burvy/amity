@@ -1,4 +1,4 @@
-use avian3d::prelude::*;
+use avian3d::{parry::shape::SharedShape, prelude::*};
 use bevy::{ecs::system::SystemParam, prelude::*};
 use serde::{Deserialize, Serialize};
 
@@ -33,11 +33,21 @@ pub struct BlockChanged {
     pub block: Block,
 }
 
+/// One block that changed after its chunk was spawned. Colliders and meshes
+/// update from these instead of rebuilding a whole chunk per edit
+#[derive(Message, Clone, Copy, Debug)]
+pub struct BlockSet {
+    pub chunk: Entity,
+    pub local: IVec3,
+    pub block: Block,
+}
+
 /// Reads and writes blocks by world position
 #[derive(SystemParam)]
 pub struct Blocks<'w, 's> {
     index: Res<'w, ChunkIndex>,
     chunks: Query<'w, 's, &'static mut Chunk>,
+    changes: MessageWriter<'w, BlockSet>,
 }
 
 impl Blocks<'_, '_> {
@@ -53,11 +63,10 @@ impl Blocks<'_, '_> {
     pub fn set(&mut self, pos: IVec3, block: Block) -> bool {
         let (chunk, local) = ChunkPos::of_block(pos);
         // if the chunk exists
-        let Some(mut chunk) = self
-            .index
-            .get(chunk)
-            .and_then(|entity| self.chunks.get_mut(entity).ok())
-        else {
+        let Some(entity) = self.index.get(chunk) else {
+            return false;
+        };
+        let Ok(mut chunk) = self.chunks.get_mut(entity) else {
             return false;
         };
         // if the block didn't change
@@ -65,6 +74,11 @@ impl Blocks<'_, '_> {
             return false;
         }
         chunk.set(local, block);
+        self.changes.write(BlockSet {
+            chunk: entity,
+            local,
+            block,
+        });
         true
     }
 
@@ -154,14 +168,44 @@ pub fn edit_allowed(edit: &EditBlock, eye: Vec3, spatial: &SpatialQuery, blocks:
     }
 }
 
-/// Keeps each chunk's collider matching its blocks, including new chunks. A chunk
-/// that becomes all air loses its collider.
-pub fn sync_colliders(mut cmds: Commands, chunks: Query<(Entity, &Chunk), Changed<Chunk>>) {
+/// Builds a newly spawned chunk's collider from all of its blocks
+pub fn init_colliders(mut cmds: Commands, chunks: Query<(Entity, &Chunk), Added<Chunk>>) {
     for (entity, chunk) in &chunks {
-        match chunk.collider() {
-            Some(collider) => cmds.entity(entity).insert(collider),
-            None => cmds.entity(entity).remove::<Collider>(),
+        if let Some(collider) = chunk.collider() {
+            cmds.entity(entity).insert(collider);
+        }
+    }
+}
+
+/// Applies block changes to chunk colliders one voxel at a time. A chunk that
+/// becomes all air loses its collider; an empty chunk gets one on its first block.
+pub fn update_colliders(
+    mut cmds: Commands,
+    mut changes: MessageReader<BlockSet>,
+    mut chunks: Query<(&Chunk, Option<&mut Collider>)>,
+) {
+    for change in changes.read() {
+        let Ok((chunk, collider)) = chunks.get_mut(change.chunk) else {
+            continue;
         };
+        let Some(mut collider) = collider else {
+            if let Some(collider) = chunk.collider() {
+                cmds.entity(change.chunk).insert(collider);
+            }
+            continue;
+        };
+        if !change.block.is_solid() && chunk.is_empty() {
+            cmds.entity(change.chunk).remove::<Collider>();
+            continue;
+        }
+        let Some(voxels) = collider.shape().as_voxels() else {
+            continue;
+        };
+        // edit a copy and hand it back through `set_shape`: avian keeps a second,
+        // scaled copy of the shape for physics, and only `set_shape` refreshes it
+        let mut voxels = voxels.clone();
+        voxels.set_voxel(change.local, change.block.is_solid());
+        collider.set_shape(SharedShape::new(voxels));
     }
 }
 
@@ -193,9 +237,35 @@ mod tests {
     }
 
     #[test]
+    fn edits_update_both_copies_of_the_collider() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let mut world = World::new();
+        world.init_resource::<ChunkIndex>();
+        world.init_resource::<Messages<BlockSet>>();
+        world.add_observer(chunk::index_chunk);
+        let mut start = Chunk::default();
+        start.set(IVec3::ZERO, Block::Stone);
+        let collider = start.collider().unwrap();
+        let entity = world.spawn((ChunkPos(IVec3::ZERO), start, collider)).id();
+
+        let mut state = SystemState::<Blocks>::new(&mut world);
+        state.get_mut(&mut world).unwrap().set(IVec3::X, Block::Stone);
+        state.apply(&mut world);
+        world.run_system_once(update_colliders).unwrap();
+
+        let collider = world.get::<Collider>(entity).unwrap();
+        for shape in [collider.shape(), collider.shape_scaled()] {
+            let voxels = shape.as_voxels().unwrap();
+            assert!(!voxels.voxel_state(IVec3::X).unwrap().is_empty());
+        }
+    }
+
+    #[test]
     fn set_reports_only_real_changes() {
         let mut world = World::new();
         world.init_resource::<ChunkIndex>();
+        world.init_resource::<Messages<BlockSet>>();
         world.add_observer(chunk::index_chunk);
         world.spawn((ChunkPos(IVec3::NEG_ONE), Chunk::default()));
 

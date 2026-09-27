@@ -38,12 +38,15 @@ impl Plugin for WorldProtocolPlugin {
         app.register_message::<edit::EditBlock>()
             .add_direction(NetworkDirection::ClientToServer);
 
+        app.add_message::<edit::BlockSet>();
         app.init_resource::<chunk::ChunkIndex>();
         app.add_observer(chunk::index_chunk);
         app.add_observer(chunk::unindex_chunk);
         app.add_systems(
             FixedPostUpdate,
-            edit::sync_colliders.before(PhysicsSystems::First),
+            (edit::init_colliders, edit::update_colliders)
+                .chain()
+                .before(PhysicsSystems::First),
         );
     }
 }
