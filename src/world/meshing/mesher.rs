@@ -1,7 +1,5 @@
 //! Builds a chunk's mesh: one textured square per visible block face
 
-use std::collections::HashMap;
-
 use amity_protocol::world::config::{BLOCK_SIZE, CHUNK_SIZE};
 use bevy::{
     asset::RenderAssetUsages,
@@ -60,8 +58,6 @@ pub fn chunk_mesh(chunk: &PaddedChunk) -> Mesh {
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
-    // each (block, face) pair's tile is looked up by name once per mesh
-    let mut tiles = HashMap::new();
 
     for y in 0..CHUNK_SIZE {
         for z in 0..CHUNK_SIZE {
@@ -82,9 +78,7 @@ pub fn chunk_mesh(chunk: &PaddedChunk) -> Mesh {
                         positions.push(((offset + Vec3::from(corner)) * BLOCK_SIZE).to_array());
                     }
                     normals.extend([face.normal.as_vec3().to_array(); 4]);
-                    let tile = *tiles
-                        .entry((block as u8, face.normal))
-                        .or_insert_with(|| face_tile(block, face.normal));
+                    let tile = face_tile(block, face.normal);
                     uvs.extend(FACE_UVS.map(|uv| tile_uv(tile, uv)));
                     indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
                 }
@@ -121,11 +115,11 @@ mod tests {
     #[test]
     fn culls_hidden_faces() {
         let mut chunk = Chunk::default();
-        chunk.set(IVec3::ZERO, Block::Stone);
+        chunk.set(IVec3::ZERO, Block::STONE);
         let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
         assert_eq!(mesh.count_vertices(), 6 * 4);
 
-        chunk.set(IVec3::X, Block::Stone);
+        chunk.set(IVec3::X, Block::STONE);
         let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
         assert_eq!(mesh.count_vertices(), 10 * 4);
     }
@@ -137,9 +131,9 @@ mod tests {
             let inside = (face.normal + IVec3::ONE) * (CHUNK_SIZE - 1) / 2;
             let across = inside + face.normal - face.normal * CHUNK_SIZE;
             let mut chunk = Chunk::default();
-            chunk.set(inside, Block::Stone);
+            chunk.set(inside, Block::STONE);
             let mut other = Chunk::default();
-            other.set(across, Block::Stone);
+            other.set(across, Block::STONE);
 
             let padded = PaddedChunk::new(&chunk, |o| (o == face.normal).then_some(&other));
             assert_eq!(chunk_mesh(&padded).count_vertices(), 5 * 4, "{:?}", face.normal);
@@ -149,9 +143,9 @@ mod tests {
     #[test]
     fn neighbour_chunk_hides_border_face() {
         let mut chunk = Chunk::default();
-        chunk.set(IVec3::new(CHUNK_SIZE - 1, 0, 0), Block::Stone);
+        chunk.set(IVec3::new(CHUNK_SIZE - 1, 0, 0), Block::STONE);
         let mut east = Chunk::default();
-        east.set(IVec3::ZERO, Block::Stone);
+        east.set(IVec3::ZERO, Block::STONE);
 
         let alone = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
         let joined = chunk_mesh(&PaddedChunk::new(&chunk, |o| (o == IVec3::X).then_some(&east)));
@@ -161,7 +155,7 @@ mod tests {
 
     #[test]
     fn solid_chunk_surrounded_by_solid_has_no_faces() {
-        let stone = Chunk::Uniform(Block::Stone);
+        let stone = Chunk::Uniform(Block::STONE);
         let mesh = chunk_mesh(&PaddedChunk::new(&stone, |_| Some(&stone)));
         assert_eq!(mesh.count_vertices(), 0);
     }

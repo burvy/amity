@@ -1,0 +1,20 @@
+// Every block in the game, one entry each. Air is built in, don't list it.
+//
+// Adding a block: draw its 8x8 png in assets/images/blocks, add a line here,
+// and use it in code as `Block::NAME` (the name in capitals).
+//
+// Fields (only `name` is required):
+//   name:     lowercase letters, digits and _. Also its texture file's name
+//   solid:    false for blocks you can walk through. Default true
+//   textures: (top: "...", side: "...", bottom: "...") picks a png per face,
+//             by file name without .png. Faces left out use the block's name.
+//             e.g. (name: "grass", textures: (top: "grass_top", bottom: "dirt"))
+//
+// A block's id is its position in this list, so reordering changes ids. That's
+// fine: the client and server are always built from the same file, and saves
+// will store names.
+[
+    (name: "stone"),
+    (name: "dirt"),
+    (name: "grass"),
+]

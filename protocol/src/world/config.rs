@@ -12,4 +12,4 @@ pub const REACH: f32 = 5.0;
 /// up to ~0.87 from the block's center, plus the player may have moved since
 pub const REACH_TOLERANCE: f32 = 0.5;
 /// What gets placed until there is an inventory
-pub const PLACED_BLOCK: Block = Block::Stone;
+pub const PLACED_BLOCK: Block = Block::STONE;

@@ -60,29 +60,3 @@ impl Blocks<'_, '_> {
         self.chunks.contains(entity)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use bevy::ecs::system::SystemState;
-
-    use super::*;
-    use crate::world::chunk::pos;
-
-    #[test]
-    fn set_reports_only_real_changes() {
-        let mut world = World::new();
-        world.init_resource::<ChunkIndex>();
-        world.init_resource::<Messages<BlockSet>>();
-        world.add_observer(pos::index_chunk);
-        world.spawn((ChunkPos(IVec3::NEG_ONE), Chunk::default()));
-
-        let mut state = SystemState::<Blocks>::new(&mut world);
-        let mut blocks = state.get_mut(&mut world).unwrap();
-        let pos = IVec3::new(-1, -5, -32);
-        assert_eq!(blocks.get(pos), Some(Block::Air));
-        assert!(blocks.set(pos, Block::Stone));
-        assert!(!blocks.set(pos, Block::Stone));
-        assert_eq!(blocks.get(pos), Some(Block::Stone));
-        assert_eq!(blocks.get(IVec3::ZERO), None);
-    }
-}

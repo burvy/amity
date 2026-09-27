@@ -251,6 +251,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "lightyear",
+ "ron",
  "serde",
 ]
 

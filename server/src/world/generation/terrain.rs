@@ -142,10 +142,10 @@ impl Terrain {
         // e.g. height 23, dirt_depth 3: y 23+ air, 22 grass, 21..=19 dirt, 18- stone
         let depth = height - 1 - y;
         match depth {
-            ..0 => Block::Air,
-            0 => Block::Grass,
-            d if d <= self.0.dirt_depth => Block::Dirt,
-            _ => Block::Stone,
+            ..0 => Block::AIR,
+            0 => Block::GRASS,
+            d if d <= self.0.dirt_depth => Block::DIRT,
+            _ => Block::STONE,
         }
     }
 
@@ -182,12 +182,12 @@ impl Terrain {
         let bottom = origin.y;
         let top = origin.y + CHUNK_SIZE - 1;
         if bottom >= highest {
-            return Chunk::Uniform(Block::Air);
+            return Chunk::Uniform(Block::AIR);
         }
         // the lowest column's grass is at `lowest - 1` and its dirt goes
         // `dirt_depth` further down; anything below that is stone everywhere
         if top < lowest - 1 - self.0.dirt_depth {
-            return Chunk::Uniform(Block::Stone);
+            return Chunk::Uniform(Block::STONE);
         }
 
         // Step 2: the chunk crosses the surface somewhere, so fill it column by
@@ -199,7 +199,7 @@ impl Terrain {
                 for y in 0..CHUNK_SIZE {
                     // `y` is local to the chunk; `bottom + y` is the world height
                     let block = self.block(height, bottom + y);
-                    if block != Block::Air {
+                    if block != Block::AIR {
                         chunk.set(IVec3::new(x, y, z), block);
                     }
                 }
@@ -264,9 +264,9 @@ mod tests {
     fn columns_are_grass_then_dirt_then_stone() {
         let terrain = Terrain::new(&WorldGenSettings::default());
         let h = 10;
-        assert_eq!(terrain.block(h, h), Block::Air);
-        assert_eq!(terrain.block(h, h - 1), Block::Grass);
-        assert_eq!(terrain.block(h, h - 4), Block::Dirt);
-        assert_eq!(terrain.block(h, h - 5), Block::Stone);
+        assert_eq!(terrain.block(h, h), Block::AIR);
+        assert_eq!(terrain.block(h, h - 1), Block::GRASS);
+        assert_eq!(terrain.block(h, h - 4), Block::DIRT);
+        assert_eq!(terrain.block(h, h - 5), Block::STONE);
     }
 }

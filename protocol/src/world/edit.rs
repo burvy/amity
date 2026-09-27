@@ -53,7 +53,7 @@ pub fn player_edit(
     }
     let target = EditTarget::from_aim(&aim);
     match action {
-        EditAction::Break => Some((target.hit, Block::Air)),
+        EditAction::Break => Some((target.hit, Block::AIR)),
         EditAction::Place => {
             can_place(target.adjacent, spatial, blocks).then_some((target.adjacent, PLACED_BLOCK))
         }
@@ -77,7 +77,7 @@ pub fn can_place(pos: IVec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
         )
         .into_iter()
         .any(|entity| !blocks.is_chunk(entity));
-    blocks.get(pos) == Some(Block::Air) && !occupied
+    blocks.get(pos) == Some(Block::AIR) && !occupied
 }
 
 /// The server's check of a client's `EditBlock`: within reach of where the server
@@ -88,7 +88,7 @@ pub fn edit_allowed(edit: &EditBlock, eye: Vec3, spatial: &SpatialQuery, blocks:
         return false;
     }
     match edit.block {
-        Block::Air => blocks.get(edit.pos).is_some_and(Block::is_solid),
+        Block::AIR => blocks.get(edit.pos).is_some_and(Block::is_solid),
         block => block == PLACED_BLOCK && can_place(edit.pos, spatial, blocks),
     }
 }

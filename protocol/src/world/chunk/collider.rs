@@ -108,9 +108,9 @@ mod tests {
     #[test]
     fn edits_update_both_copies_of_the_collider() {
         let mut start = Chunk::default();
-        start.set(IVec3::ZERO, Block::Stone);
+        start.set(IVec3::ZERO, Block::STONE);
         let (mut world, entity) = world_with(start);
-        set_block(&mut world, IVec3::X, Block::Stone);
+        set_block(&mut world, IVec3::X, Block::STONE);
 
         let collider = world.get::<Collider>(entity).unwrap();
         for shape in [collider.shape(), collider.shape_scaled()] {
@@ -121,9 +121,9 @@ mod tests {
 
     #[test]
     fn editing_a_solid_chunk_swaps_its_box_for_voxels() {
-        let (mut world, entity) = world_with(Chunk::Uniform(Block::Stone));
+        let (mut world, entity) = world_with(Chunk::Uniform(Block::STONE));
         assert!(world.get::<Collider>(entity).unwrap().shape().as_voxels().is_none());
-        set_block(&mut world, IVec3::ZERO, Block::Air);
+        set_block(&mut world, IVec3::ZERO, Block::AIR);
 
         let collider = world.get::<Collider>(entity).unwrap();
         let voxels = collider.shape().as_voxels().unwrap();

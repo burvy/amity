@@ -21,7 +21,7 @@ impl PaddedChunk {
     /// loaded. Missing neighbours count as air.
     /// Edges and corners of the border stay air: face culling never looks diagonally.
     pub fn new<'a>(center: &Chunk, neighbour: impl Fn(IVec3) -> Option<&'a Chunk>) -> Self {
-        let mut blocks = vec![Block::Air; (PADDED_SIZE * PADDED_SIZE * PADDED_SIZE) as usize];
+        let mut blocks = vec![Block::AIR; (PADDED_SIZE * PADDED_SIZE * PADDED_SIZE) as usize];
         // interior: rows along x are contiguous in both layouts, so fill a row at a time
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {

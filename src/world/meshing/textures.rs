@@ -1,6 +1,8 @@
 //! Which atlas tile each block face shows. The atlas is packed by build.rs from
-//! assets/images/blocks: a block named `grass` uses `grass.png`, and
-//! `grass_top.png` / `grass_side.png` / `grass_bottom.png` override single faces.
+//! every png in assets/images/blocks; which png each face uses is set per block in
+//! assets/blocks.ron (see `Block::texture`).
+
+use std::sync::LazyLock;
 
 use amity_protocol::world::block::Block;
 use bevy::prelude::*;
@@ -12,37 +14,34 @@ mod atlas {
 }
 pub const ATLAS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/atlas.png"));
 
-/// The texture a block's faces use, as a file name in assets/images/blocks
-/// without `.png`
-fn block_texture(block: Block) -> &'static str {
-    match block {
-        Block::Air => "air",
-        Block::Stone => "stone",
-        Block::Dirt => "dirt",
-        Block::Grass => "grass",
-    }
-}
+/// The faces whose texture can differ, in the order `FACE_TILES` stores them
+const FACE_NORMALS: [IVec3; 3] = [IVec3::Y, IVec3::X, IVec3::NEG_Y]; // top, side, bottom
 
-/// Which atlas tile a face shows. A face-specific texture (`grass_top`,
-/// `grass_side`, `grass_bottom`) beats the block's plain one; with neither, the
-/// face shows the missing-texture checker.
+/// Every block's atlas tile per face (top, side, bottom), indexed by block id.
+/// Texture names are looked up in the atlas once, the first time a mesh needs
+/// one, instead of once per face drawn
+static FACE_TILES: LazyLock<Vec<[u32; 3]>> = LazyLock::new(|| {
+    Block::all()
+        .map(|block| FACE_NORMALS.map(|normal| tile_named(block.texture(normal))))
+        .collect()
+});
+
+/// Which atlas tile a face shows. A name missing from the atlas shows the
+/// magenta checker (build.rs already refuses blocks.ron naming a missing png)
 pub fn face_tile(block: Block, normal: IVec3) -> u32 {
     let face = match normal {
-        IVec3::Y => "top",
-        IVec3::NEG_Y => "bottom",
-        _ => "side",
+        IVec3::Y => 0,
+        IVec3::NEG_Y => 2,
+        _ => 1,
     };
-    let name = block_texture(block);
-    tile_named(&format!("{name}_{face}"))
-        .or_else(|| tile_named(name))
-        .unwrap_or(atlas::MISSING)
+    FACE_TILES[block.id() as usize][face]
 }
 
-fn tile_named(name: &str) -> Option<u32> {
+fn tile_named(name: &str) -> u32 {
     atlas::TILES
         .iter()
         .find(|(tile_name, _)| *tile_name == name)
-        .map(|&(_, tile)| tile)
+        .map_or(atlas::MISSING, |&(_, tile)| tile)
 }
 
 /// Maps a 0..1 face UV into `tile`'s rectangle of the atlas. Pulled in by a sliver
@@ -75,7 +74,7 @@ mod tests {
 
     #[test]
     fn every_block_face_has_a_texture() {
-        for block in [Block::Stone, Block::Dirt, Block::Grass] {
+        for block in Block::all().filter(|block| block.is_solid()) {
             for face in &FACES {
                 assert_ne!(
                     face_tile(block, face.normal),

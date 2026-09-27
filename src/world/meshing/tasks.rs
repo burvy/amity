@@ -78,7 +78,7 @@ pub fn start_mesh_tasks(
     for (entity, pos, chunk) in &dirty {
         let mut entity = cmds.entity(entity);
         entity.remove::<NeedsMesh>();
-        if *chunk == Chunk::Uniform(Block::Air) {
+        if *chunk == Chunk::Uniform(Block::AIR) {
             entity.remove::<(MeshTask, Mesh3d)>();
             continue;
         }

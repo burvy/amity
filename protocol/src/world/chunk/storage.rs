@@ -5,7 +5,8 @@
 //! - `Uniform`: the whole chunk is one block. 1 byte instead of 32 KiB.
 //! - `Paletted`: the list of block types present (the palette), plus one palette
 //!   index per block, packed into as few bits as the palette needs:
-//!   2 types -> 1 bit, 3-4 -> 2 bits, 5-16 -> 4 bits, 17-256 -> 8 bits.
+//!   2 types -> 1 bit, 3-4 -> 2 bits, 5-16 -> 4 bits, 17-256 -> 8 bits,
+//!   more -> 16 bits.
 //!   Air, grass, dirt and stone fit in 2 bits: 8 KiB instead of 32 KiB.
 //!
 //! This same form is what goes over the network, and later into save files.
@@ -26,7 +27,7 @@ pub enum Chunk {
 
 impl Default for Chunk {
     fn default() -> Self {
-        Chunk::Uniform(Block::Air)
+        Chunk::Uniform(Block::AIR)
     }
 }
 
@@ -154,8 +155,8 @@ impl Chunk {
 pub struct Paletted {
     /// Each block type in the chunk, once. Blocks store an index into this
     palette: Vec<Block>,
-    /// Bits per palette index: 1, 2, 4 or 8. These all divide 8, so an index
-    /// never straddles two bytes. `Block` is a u8, so 256 types, and 8 bits, is the most
+    /// Bits per palette index: 1, 2, 4, 8 or 16. Up to 8 they divide a byte, so
+    /// an index never straddles two bytes; 16 is exactly two bytes
     bits: u8,
     /// VOLUME palette indices, `8 / bits` to a byte, lowest bits first
     data: Box<[u8]>,
@@ -203,6 +204,11 @@ impl Paletted {
     }
 
     fn write(&mut self, index: usize, entry: usize) {
+        if self.bits == 16 {
+            let at = index * 2;
+            self.data[at..at + 2].copy_from_slice(&(entry as u16).to_le_bytes());
+            return;
+        }
         let bit = index * self.bits as usize;
         let shift = bit % 8;
         let mask = (((1u16 << self.bits) - 1) as u8) << shift;
@@ -225,18 +231,22 @@ impl Paletted {
 
 /// Reads palette index `index` from indices packed `bits` wide
 fn read_entry(data: &[u8], bits: u8, index: usize) -> usize {
+    if bits == 16 {
+        return u16::from_le_bytes([data[index * 2], data[index * 2 + 1]]) as usize;
+    }
     let bit = index * bits as usize;
     let mask = (1 << bits) - 1;
     (data[bit / 8] as usize >> (bit % 8)) & mask
 }
 
-/// Fewest bits (1, 2, 4 or 8) that can index a palette of `len` entries
+/// Fewest bits (1, 2, 4, 8 or 16) that can index a palette of `len` entries
 fn bits_for(len: usize) -> u8 {
     match len {
         0..=2 => 1,
         3..=4 => 2,
         5..=16 => 4,
-        _ => 8,
+        17..=256 => 8,
+        _ => 16,
     }
 }
 
@@ -244,7 +254,7 @@ fn bits_for(len: usize) -> u8 {
 mod tests {
     use super::*;
 
-    const TYPES: [Block; 4] = [Block::Air, Block::Stone, Block::Dirt, Block::Grass];
+    const TYPES: [Block; 4] = [Block::AIR, Block::STONE, Block::DIRT, Block::GRASS];
 
     /// A block for every position that mixes all types irregularly
     fn pattern(local: IVec3) -> Block {
@@ -281,10 +291,10 @@ mod tests {
 
     #[test]
     fn compacting_drops_unused_types() {
-        let mut chunk = Chunk::Uniform(Block::Stone);
-        chunk.set(IVec3::ONE, Block::Dirt);
-        chunk.set(IVec3::ZERO, Block::Grass);
-        chunk.set(IVec3::ONE, Block::Stone);
+        let mut chunk = Chunk::Uniform(Block::STONE);
+        chunk.set(IVec3::ONE, Block::DIRT);
+        chunk.set(IVec3::ZERO, Block::GRASS);
+        chunk.set(IVec3::ONE, Block::STONE);
 
         let compact = chunk.compacted();
         let Chunk::Paletted(paletted) = &compact else {
@@ -295,8 +305,8 @@ mod tests {
             assert_eq!(compact.get(local), chunk.get(local));
         }
 
-        chunk.set(IVec3::ZERO, Block::Stone);
-        assert_eq!(chunk.compacted(), Chunk::Uniform(Block::Stone));
+        chunk.set(IVec3::ZERO, Block::STONE);
+        assert_eq!(chunk.compacted(), Chunk::Uniform(Block::STONE));
     }
 
     #[test]
@@ -305,7 +315,7 @@ mod tests {
         for local in every_local() {
             chunk.set(local, pattern(local));
         }
-        let mut row = [Block::Air; CHUNK_SIZE as usize];
+        let mut row = [Block::AIR; CHUNK_SIZE as usize];
         chunk.read_row(5, 9, &mut row);
         for (x, block) in row.iter().enumerate() {
             assert_eq!(*block, chunk.get(IVec3::new(x as i32, 5, 9)));
@@ -313,12 +323,24 @@ mod tests {
     }
 
     #[test]
+    fn sixteen_bit_indices_round_trip() {
+        // more than 256 palette entries (repeats are fine for testing the packing)
+        let mut paletted = Paletted::empty(vec![Block::AIR; 300]);
+        assert_eq!(paletted.bits, 16);
+        for (index, entry) in [(0, 299), (1, 257), (VOLUME - 1, 1)] {
+            paletted.write(index, entry);
+            assert_eq!(paletted.entry(index), entry);
+        }
+        assert_eq!(paletted.entry(2), 0);
+    }
+
+    #[test]
     fn emptiness_ignores_leftover_palette_entries() {
         let mut chunk = Chunk::default();
         assert!(chunk.is_empty());
-        chunk.set(IVec3::ONE, Block::Stone);
+        chunk.set(IVec3::ONE, Block::STONE);
         assert!(!chunk.is_empty());
-        chunk.set(IVec3::ONE, Block::Air);
+        chunk.set(IVec3::ONE, Block::AIR);
         assert!(chunk.is_empty());
     }
 }
