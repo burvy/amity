@@ -52,7 +52,9 @@ pub fn init_chunk_material(
     cmds.insert_resource(ChunkMaterials {
         solid: mats.add(StandardMaterial {
             base_color_texture: Some(atlas.clone()),
-            perceptual_roughness: 0.25,
+            // rough and matte, like real stone, soil and wood: little shine from
+            // the sun, and only faint reflections of the sky
+            perceptual_roughness: 0.9,
             ..default()
         }),
         fluid: mats.add(StandardMaterial {

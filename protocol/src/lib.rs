@@ -8,6 +8,7 @@ pub mod inventory;
 pub mod net;
 pub mod physics;
 pub mod player;
+pub mod sky;
 pub mod stuff;
 pub mod world;
 
@@ -19,6 +20,7 @@ impl Plugin for ProtocolPlugin {
         app.add_plugins((
             player::PlayerProtocolPlugin,
             inventory::InventoryProtocolPlugin,
+            sky::SkyProtocolPlugin,
             stuff::StuffProtocolPlugin,
             world::WorldProtocolPlugin,
             physics::PhysicsProtocolPlugin,

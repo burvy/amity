@@ -62,6 +62,9 @@ getrandom = "0.4.3"
 getrandom = { version = "0.4.3", features = ["wasm_js"] }
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+# WebGPU instead of WebGL2 on the web: the sky's atmosphere and auto-exposure run
+# compute shaders, which WebGL2 doesn't have. Browsers without WebGPU can't run it
+bevy = { version = "0.19", default-features = false, features = ["webgpu"] }
 
 [build-dependencies]
 # build.rs packs assets/images/blocks/*.png into the block texture atlas

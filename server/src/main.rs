@@ -9,6 +9,7 @@ use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::St
 
 mod connection;
 mod player;
+mod sky;
 mod stuff;
 mod world;
 
@@ -26,6 +27,7 @@ fn main() {
     app.add_plugins((
         connection::ConnectionPlugin,
         player::PlayerPlugin,
+        sky::SkyPlugin,
         stuff::StuffPlugin,
         world::WorldPlugin,
     ));

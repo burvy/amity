@@ -5,7 +5,6 @@ use bevy::prelude::*;
 use lightyear::core::timeline::is_in_rollback;
 
 mod chunks;
-mod definition;
 mod edit;
 pub(crate) mod meshing;
 
@@ -18,7 +17,6 @@ pub struct WorldPlugin;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(meshing::MeshingPlugin);
-        app.add_systems(Startup, definition::spawn_light);
         app.init_resource::<chunks::IncomingChunks>();
         app.init_resource::<edit::HeldChanges>();
         // unloads before chunks, so a chunk dropped and resent in one frame ends up
