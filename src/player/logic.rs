@@ -5,7 +5,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 use lightyear::prelude::*;
-use shooter_protocol::{aim, shared, stuff};
+use amity_protocol::{aim, shared, stuff};
 
 use crate::player::definition;
 

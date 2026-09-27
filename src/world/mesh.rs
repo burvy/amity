@@ -7,7 +7,7 @@ use bevy::{
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, futures::check_ready},
 };
-use shooter_protocol::world::{
+use amity_protocol::world::{
     chunk::{Block, BLOCK_SIZE, CHUNK_SIZE, Chunk, ChunkIndex, ChunkPos},
     edit::BlockSet,
 };

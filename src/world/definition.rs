@@ -1,7 +1,7 @@
 
 use bevy::prelude::*;
 use lightyear::prelude::MessageReceiver;
-use shooter_protocol::{
+use amity_protocol::{
     stuff,
     world::chunk,
 };

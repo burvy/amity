@@ -1,5 +1,5 @@
 [package]
-name = "shooter-server"
+name = "amity-server"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,7 +8,7 @@ edition = "2024"
 # files and no internet. Pair with the client's own dev-local.
 # NEVER ship a build like this
 dev-local = [
-    "shooter-protocol/dev-local",
+    "amity-protocol/dev-local",
     "lightyear/webtransport_self_signed",
 ]
 
@@ -36,5 +36,5 @@ lightyear = { version = "0.28.0", default-features = false, features = [
     "interpolation",
 ]}
 tokio = { version = "1.53.1", features = ["rt"] }
-# serde is not required as serialization happens in shooter-protocol
-shooter-protocol = { path = "../protocol"} # protocol shared with client
+# serde is not required as serialization happens in amity-protocol
+amity-protocol = { path = "../protocol"} # protocol shared with client

@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin};
-use shooter_protocol::protocol;
+use amity_protocol::protocol;
 mod generation;
 mod logic;
 mod server;

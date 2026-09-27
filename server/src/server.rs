@@ -13,8 +13,8 @@ use lightyear::{
     netcode::{server_plugin::NetcodeConfig, NetcodeServer},
     webtransport::server::WebTransportServerIo,
 };
-use shooter_protocol::world::chunk::{self, Chunk, ChunkData, ChunkPos};
-use shooter_protocol::{protocol, shared, stuff};
+use amity_protocol::world::chunk::{self, Chunk, ChunkData, ChunkPos};
+use amity_protocol::{protocol, shared, stuff};
 // use powershell:
 // Install-Module -Name Posh-ACME -Scope CurrentUser
 // Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned

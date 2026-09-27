@@ -21,7 +21,7 @@ use lightyear::{
     },
     webtransport::client::WebTransportClientIo,
 };
-use shooter_protocol::{protocol, shared};
+use amity_protocol::{protocol, shared};
 
 use crate::player;
 

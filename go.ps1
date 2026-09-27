@@ -3,7 +3,7 @@
 
         .\go.ps1            -> menu
         .\go.ps1 dev        -> server + client, offline, no deploy
-        .\go.ps1 release    -> deploy\ containing shooter-server.exe and dist\
+        .\go.ps1 release    -> deploy\ containing amity-server.exe and dist\
 
     dev never touches the network and release never enables dev-local, so the
     two paths cannot contaminate each other.
@@ -40,12 +40,12 @@ $targetDir = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).ta
 if ($Mode -eq 'dev') {
     # Build both before launching anything: `cargo run` would start the client
     # while the server is still compiling, and it would fail to connect.
-    Invoke-Step 'building server' { cargo build -p shooter-server --features dev-local }
+    Invoke-Step 'building server' { cargo build -p amity-server --features dev-local }
     Invoke-Step 'building client' { cargo build --features dev-local }
 
     # Run the built exe directly: the new window needs no cargo on PATH and
     # doesn't contend with the client's `cargo run` for the build lock.
-    $server = Join-Path $targetDir 'x86_64-pc-windows-msvc\debug\shooter-server.exe'
+    $server = Join-Path $targetDir 'x86_64-pc-windows-msvc\debug\amity-server.exe'
     Write-Host "`n==> starting server in a new window" -ForegroundColor Cyan
     Start-Process pwsh -WorkingDirectory $PSScriptRoot -ArgumentList @(
         '-NoExit', '-Command', "& '$server'"
@@ -59,14 +59,14 @@ if ($Mode -eq 'dev') {
 }
 
 # RELEASE
-$exe = Join-Path $targetDir 'x86_64-pc-windows-msvc\release\shooter-server.exe'
+$exe = Join-Path $targetDir 'x86_64-pc-windows-msvc\release\amity-server.exe'
 
-Invoke-Step 'building server (release)' { cargo build --release -p shooter-server }
+Invoke-Step 'building server (release)' { cargo build --release -p amity-server }
 if (-not (Test-Path $exe)) { throw "expected the server at $exe" }
 
-# Only shooter-wasm: build.ps1 clears just what it rebuilds, and trunk's
+# Only amity-wasm: build.ps1 clears just what it rebuilds, and trunk's
 # copy-dir picks up life/ and game/ from assets\ as they already stand.
-Invoke-Step 'building site + shooter wasm' { & (Join-Path $site 'build.ps1') shooter-wasm }
+Invoke-Step 'building site + amity wasm' { & (Join-Path $site 'build.ps1') amity-wasm }
 
 $out = Join-Path $PSScriptRoot 'deploy'
 Remove-Item -Recurse -Force $out -ErrorAction SilentlyContinue
@@ -75,7 +75,7 @@ Copy-Item $exe $out
 Copy-Item (Join-Path $site 'dist') $out -Recurse
 
 Write-Host "`ndeploy\ ready:" -ForegroundColor Green
-Write-Host '  shooter-server.exe  -> C:\Users\Burvy\Desktop\'
-Write-Host '  dist\               -> C:\Users\Burvy\Desktop\burvy-dev\dist'
-Write-Host '  then restart shooter-server.exe (nginx needs no reload)'
+Write-Host '  amity-server.exe  -> C:\Users\Burvy\Desktop\'
+Write-Host '  dist\             ->C:\Users\Burvy\Desktop\burvy-dev\dist'
+Write-Host '  then restart amity-server.exe (nginx needs no reload)'
 Invoke-Item $out

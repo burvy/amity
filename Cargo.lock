@@ -228,6 +228,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "amity"
+version = "0.1.0"
+dependencies = [
+ "amity-protocol",
+ "avian3d",
+ "bevy",
+ "bevy-inspector-egui",
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "getrandom 0.4.3",
+ "lightyear",
+ "log",
+ "png",
+ "tracing",
+]
+
+[[package]]
+name = "amity-protocol"
+version = "0.1.0"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "lightyear",
+ "serde",
+]
+
+[[package]]
+name = "amity-server"
+version = "0.1.0"
+dependencies = [
+ "amity-protocol",
+ "avian3d",
+ "bevy",
+ "lightyear",
+ "tokio",
+]
+
+[[package]]
 name = "android-activity"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7234,44 +7272,6 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "shooter"
-version = "0.1.0"
-dependencies = [
- "avian3d",
- "bevy",
- "bevy-inspector-egui",
- "getrandom 0.2.17",
- "getrandom 0.3.4",
- "getrandom 0.4.3",
- "lightyear",
- "log",
- "png",
- "shooter-protocol",
- "tracing",
-]
-
-[[package]]
-name = "shooter-protocol"
-version = "0.1.0"
-dependencies = [
- "avian3d",
- "bevy",
- "lightyear",
- "serde",
-]
-
-[[package]]
-name = "shooter-server"
-version = "0.1.0"
-dependencies = [
- "avian3d",
- "bevy",
- "lightyear",
- "shooter-protocol",
- "tokio",
-]
 
 [[package]]
 name = "simba"

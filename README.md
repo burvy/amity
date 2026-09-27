@@ -1,20 +1,20 @@
-# [GAME-NAME]
+# Amity
 
 To run a quick dev build:
-`cargo run -p shooter --features dev-local`
-`cargo run -p shooter-server --features dev-local`
+`cargo run -p amity --features dev-local`
+`cargo run -p amity-server --features dev-local`
 
 `.\go.ps1`
 `.\go.ps1 dev`
 `.\go.ps1 release`
 
 To fully build:  
-`cargo build -p shooter-server --release`  
+`cargo build -p amity-server --release`  
 Put the server on the desktop, run it  
 `.\build.ps1` on burvy.dev repo  
 
 The released executables are at:  
-`C:\ct\burvy-game\x86_64-pc-windows-msvc\release\`  
+`C:\ct\amity\x86_64-pc-windows-msvc\release\`  
 because of the filepath changes in .cargo that shortens the path so cargo 
 check works
 

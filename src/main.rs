@@ -1,3 +1,3 @@
 fn main() {
-    shooter::run()
+    amity::run()
 }

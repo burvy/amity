@@ -17,7 +17,7 @@ pub fn run() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                canvas: Some("#shooter-canvas".into()),
+                canvas: Some("#amity-canvas".into()),
                 fit_canvas_to_parent: true,
                 ..default()
             }),
@@ -36,7 +36,7 @@ impl Plugin for MainPlugin {
         app.add_plugins(player::PlayerPlugin);
         app.add_plugins(world::WorldPlugin);
         app.add_plugins(net::NetPlugin);
-        app.add_plugins(shooter_protocol::protocol::ProtocolPlugin);
+        app.add_plugins(amity_protocol::protocol::ProtocolPlugin);
 
         // dev-local only. EguiPlugin must come first - the inspector asserts
         // on it at startup rather than pulling it in itself.

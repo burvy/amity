@@ -6,8 +6,8 @@ use lightyear::core::timeline::LocalTimeline;
 use lightyear::connection::{client::Connected, client_of::ClientOf};
 use lightyear::prelude::{ControlledBy, MessageReceiver, MessageSender};
 use lightyear::prelude::input::native::ActionState;
-use shooter_protocol::world::{chunk, edit};
-use shooter_protocol::{aim, protocol, shared, stuff};
+use amity_protocol::world::{chunk, edit};
+use amity_protocol::{aim, protocol, shared, stuff};
 
 /// Marks every player's physics state changed each tick, so lightyear replicates it
 /// even when it isn't moving. Clients only check their prediction when new server

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use lightyear::prelude::{
     input::native::ActionState, Controlled, MessageReceiver, MessageSender,
 };
-use shooter_protocol::{
+use amity_protocol::{
     protocol::PlayerInputs,
     world::edit::{self, BlockChanged, Blocks, EditAction, EditBlock, EditChannel},
 };
