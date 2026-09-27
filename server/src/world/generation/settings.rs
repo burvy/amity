@@ -95,7 +95,8 @@ impl Default for WorldGenSettings {
                         when: When {
                             under_water: Some(false),
                             above_water: Some((0.0, 1.5)),
-                            ..When::default()
+                            altitude: (f64::MIN, 4.0),
+                            ..Default::default()
                         },
                         layers: vec![(Block::SAND, 3)],
                     },
@@ -171,6 +172,7 @@ pub struct SurfaceRule {
 #[derive(Clone, Debug)]
 pub struct When {
     /// Ground height in metres (with the wobble added)
+    /// Min, Max
     pub altitude: (f64, f64),
     /// Steepness in degrees: 0 flat, 45 one block up per block across, 90 a wall
     pub slope: (f64, f64),
