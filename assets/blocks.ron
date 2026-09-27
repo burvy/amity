@@ -23,4 +23,7 @@
     (name: "gravel"),
     (name: "snow"),
     (name: "water", fluid: true),
+    (name: "dry_grass"),
+    (name: "podzol"),
+    (name: "sandstone"),
 ]
