@@ -1,14 +1,18 @@
 use amity_protocol::{
     player::definition::PlayerInputs,
     world::{
+        block::Block,
         blocks::Blocks,
+        chunk::{ChunkIndex, ChunkPos},
         edit::{player_edit, EditAction},
         messages::{BlockChanged, EditBlock, EditChannel},
     },
 };
 use avian3d::prelude::*;
-use bevy::prelude::*;
+use bevy::{platform::collections::HashMap, prelude::*};
 use lightyear::prelude::{input::native::ActionState, Controlled, MessageReceiver, MessageSender};
+
+use super::chunks::IncomingChunks;
 
 /// Asks the server to make our player's edits. Nothing changes locally until the
 /// server's `BlockChanged` arrives, so the client's world is only ever the server's.
@@ -38,13 +42,42 @@ pub fn request_edits(
     sender.send::<EditChannel>(EditBlock { pos, block });
 }
 
+/// Block changes for chunks that haven't arrived yet, by chunk position, oldest
+/// first. Changes come on their own channel, so they can overtake their chunk
+/// (which may be queued behind many others). The server only sends a change for
+/// a chunk it has already sent, so the chunk, when it arrives, is from before the
+/// change, and applying the held changes on top of it is correct
+#[derive(Resource, Default)]
+pub struct HeldChanges(HashMap<IVec3, Vec<(IVec3, Block)>>);
+
 /// The server's block changes: the only way the client's world changes after a
-/// chunk arrives
+/// chunk arrives. Changes for chunks not here yet are held until they are, as are
+/// changes for a chunk whose newer copy is still on its way in (applying them to
+/// the old copy would be lost when the new one replaces it)
 pub fn receive_block_changes(
     mut receiver: Single<&mut MessageReceiver<BlockChanged>>,
+    mut held: ResMut<HeldChanges>,
+    index: Res<ChunkIndex>,
+    incoming: Res<IncomingChunks>,
     mut blocks: Blocks,
 ) {
+    let ready = |chunk: ChunkPos| index.contains(chunk) && !incoming.contains(chunk);
+    // first, changes held for chunks that have arrived since
+    held.0.retain(|&chunk, changes| {
+        if !ready(ChunkPos(chunk)) {
+            return true;
+        }
+        for &(pos, block) in changes.iter() {
+            blocks.set(pos, block);
+        }
+        false
+    });
     for BlockChanged { pos, block } in receiver.receive() {
-        blocks.set(pos, block);
+        let chunk = ChunkPos::of_block(pos).0;
+        if ready(chunk) {
+            blocks.set(pos, block);
+        } else {
+            held.0.entry(chunk.0).or_default().push((pos, block));
+        }
     }
 }

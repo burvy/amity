@@ -9,6 +9,8 @@ pub const VIEW_DISTANCE: IVec3 = IVec3::new(8, 4, 8);
 /// so walking back and forth over a border doesn't resend the same chunks
 pub const UNLOAD_MARGIN: i32 = 2;
 
-/// Rough bytes of chunk data sent to each client per tick (64 ticks a second).
-/// Uniform chunks are ~20 bytes, mixed ones ~8 KiB
-pub const SEND_BYTES_PER_TICK: usize = 16 * 1024;
+/// Rough bytes of chunk data sent to each client per tick (64 ticks a second),
+/// 4 KiB = 256 KiB/s. Uniform chunks are ~20 bytes, mixed ones 8-16 KiB. Sending
+/// faster than the link carries only builds a queue (and resends); keep it
+/// under what a player's connection can really take
+pub const SEND_BYTES_PER_TICK: usize = 4 * 1024;

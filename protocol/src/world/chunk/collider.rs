@@ -31,8 +31,13 @@ pub fn chunk_collider(chunk: &Chunk) -> Option<Collider> {
     }
 }
 
-/// Builds a newly spawned chunk's collider from all of its blocks
-pub fn init_colliders(mut cmds: Commands, chunks: Query<(Entity, &Chunk), Added<Chunk>>) {
+/// Builds a newly spawned chunk's collider from all of its blocks, unless it was
+/// spawned with one (both sides build them on background threads first)
+#[allow(clippy::type_complexity)] // a single-use query reads worse as an alias
+pub fn init_colliders(
+    mut cmds: Commands,
+    chunks: Query<(Entity, &Chunk), (Added<Chunk>, Without<Collider>)>,
+) {
     for (entity, chunk) in &chunks {
         if let Some(collider) = chunk_collider(chunk) {
             cmds.entity(entity).insert(collider);

@@ -5,6 +5,7 @@ use bevy::prelude::*;
 /// chunks sit in memory
 pub const PREGEN_MARGIN: IVec3 = IVec3::new(4, 2, 4);
 
-/// Chunks generated at the same time. Higher fills the world faster but uses
-/// more CPU while it does
-pub const MAX_GENERATING: usize = 32;
+/// Chunks generated at the same time. Higher fills the world faster, but they
+/// share the background threads with everything else (a region's lake flooding
+/// can hold one for a second), and too many at once starves the game loop
+pub const MAX_GENERATING: usize = 8;

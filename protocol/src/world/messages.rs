@@ -8,9 +8,15 @@ use super::{
     chunk::{Chunk, ChunkPos},
 };
 
-/// Server -> client, ordered + reliable. Carries chunks and block changes, so a
-/// block change can never overtake the chunk it modifies
+/// Server -> client, ordered + reliable. Carries whole chunks (and unloads),
+/// which can queue up for seconds while a player joins or explores
 pub struct WorldChannel;
+
+/// Server -> client, ordered + reliable. Block changes, on their own so they
+/// never wait behind a queue of chunks: breaking and placing stay responsive.
+/// A change can therefore arrive before the chunk it's in; the client holds it
+/// until the chunk arrives (see client `world/edit.rs`)
+pub struct BlockChannel;
 
 /// Client -> server, ordered + reliable. Edits get their own channel so they are
 /// never stuck behind a large chunk transfer

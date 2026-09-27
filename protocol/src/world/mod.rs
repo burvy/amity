@@ -30,6 +30,11 @@ impl Plugin for WorldProtocolPlugin {
             .add_direction(NetworkDirection::ServerToClient);
         app.register_message::<messages::UnloadChunk>()
             .add_direction(NetworkDirection::ServerToClient);
+        app.add_channel::<messages::BlockChannel>(ChannelSettings {
+            mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+            ..default()
+        })
+        .add_direction(NetworkDirection::ServerToClient);
         app.register_message::<messages::BlockChanged>()
             .add_direction(NetworkDirection::ServerToClient);
 

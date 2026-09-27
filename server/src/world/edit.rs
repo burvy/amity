@@ -4,7 +4,7 @@ use amity_protocol::{
         blocks::Blocks,
         chunk::ChunkPos,
         edit::edit_allowed,
-        messages::{BlockChanged, EditBlock, WorldChannel},
+        messages::{BlockChanged, BlockChannel, EditBlock},
     },
 };
 use avian3d::prelude::{Position, SpatialQuery};
@@ -45,7 +45,7 @@ pub fn receive_edits(
                     block: edit.block,
                 });
             } else if let Some(actual) = blocks.get(edit.pos) {
-                sender.send::<WorldChannel>(BlockChanged {
+                sender.send::<BlockChannel>(BlockChanged {
                     pos: edit.pos,
                     block: actual,
                 });
@@ -56,7 +56,7 @@ pub fn receive_edits(
     for (_, _, mut sender, view) in &mut clients {
         for change in &accepted {
             if view.has(ChunkPos::of_block(change.pos).0) {
-                sender.send::<WorldChannel>(change.clone());
+                sender.send::<BlockChannel>(change.clone());
             }
         }
     }

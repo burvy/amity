@@ -19,13 +19,16 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(meshing::MeshingPlugin);
         app.add_systems(Startup, definition::spawn_light);
+        app.init_resource::<chunks::IncomingChunks>();
+        app.init_resource::<edit::HeldChanges>();
         // unloads before chunks, so a chunk dropped and resent in one frame ends up
-        // loaded; block changes last, so they land on chunks that arrived with them
+        // loaded; block changes last, so they land on chunks spawned this frame
         app.add_systems(
             Update,
             (
                 chunks::receive_unloads,
                 chunks::receive_chunks,
+                chunks::spawn_ready_chunks,
                 edit::receive_block_changes,
             )
                 .chain()

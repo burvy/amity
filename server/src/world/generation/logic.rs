@@ -2,9 +2,9 @@ use std::iter;
 
 use amity_protocol::{
     player::definition::PlayerMarker,
-    world::chunk::{chunk_body, Chunk, ChunkIndex, ChunkPos},
+    world::chunk::{chunk_body, collider::chunk_collider, Chunk, ChunkIndex, ChunkPos},
 };
-use avian3d::prelude::Position;
+use avian3d::prelude::{Collider, Position};
 use bevy::{
     platform::collections::{HashMap, HashSet},
     prelude::*,
@@ -20,9 +20,11 @@ use crate::{
     world::{area, streaming::config::VIEW_DISTANCE},
 };
 
-/// Chunks being generated on background threads, by position
+/// Chunks being generated on background threads, by position. Each task also
+/// builds the chunk's collider, which takes a few milliseconds for a chunk of
+/// mixed blocks: too long to do for dozens of chunks on the main thread
 #[derive(Resource, Default)]
-pub struct Generating(HashMap<IVec3, Task<Chunk>>);
+pub struct Generating(HashMap<IVec3, Task<(Chunk, Option<Collider>)>>);
 
 /// Starts generating the missing chunks around spawn and every player, nearest
 /// first, keeping at most MAX_GENERATING in flight.
@@ -80,7 +82,11 @@ pub fn start_generating(
             // `Task`, a handle to its eventual result, checked in `finish_generating`.
             // each task gets its own handle: tasks can't borrow resources
             let terrain = terrain.clone();
-            let task = pool.spawn(async move { terrain.generate(ChunkPos(pos)) });
+            let task = pool.spawn(async move {
+                let chunk = terrain.generate(ChunkPos(pos));
+                let collider = chunk_collider(&chunk);
+                (chunk, collider)
+            });
             generating.0.insert(pos, task);
         }
         if complete {
@@ -98,8 +104,11 @@ pub fn finish_generating(mut cmds: Commands, mut generating: ResMut<Generating>)
     // Finished tasks spawn their chunk (streaming then sends it to clients) and
     // are dropped from the map; running ones stay for the next tick
     generating.0.retain(|&pos, task| match check_ready(task) {
-        Some(chunk) => {
-            cmds.spawn(chunk_body(ChunkPos(pos), chunk));
+        Some((chunk, collider)) => {
+            let mut entity = cmds.spawn(chunk_body(ChunkPos(pos), chunk));
+            if let Some(collider) = collider {
+                entity.insert(collider);
+            }
             false
         }
         None => true,
