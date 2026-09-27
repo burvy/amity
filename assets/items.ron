@@ -1,0 +1,14 @@
+// Every item that isn't a block. Every block in blocks.ron is already an item of
+// the same name (placing it places the block), so don't list blocks here.
+//
+// Adding an item: draw its 8x8 icon png in assets/images/blocks, add a line
+// here, and use it in code as `Item::NAME` (the name in capitals).
+//
+// Fields (only `name` is required):
+//   name:  lowercase letters, digits and _. Must not be a block's name
+//   stack: how many fit in one inventory slot. Default 64
+//   icon:  the png (without .png) shown in the inventory. Default: the name
+//
+// Tools, weapons and the like will get more fields here as they're added.
+[
+]
