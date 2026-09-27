@@ -60,7 +60,8 @@ pub fn player_edit(
     }
 }
 
-/// A block can go at `pos` if it is air and nothing but chunks overlaps it
+/// A block can go at `pos` if it is air or a fluid (placing into water replaces
+/// it) and nothing but chunks overlaps it
 /// (players, props). Slightly shrunk so something merely touching the block's
 /// faces doesn't count
 pub fn can_place(pos: IVec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
@@ -77,7 +78,10 @@ pub fn can_place(pos: IVec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
         )
         .into_iter()
         .any(|entity| !blocks.is_chunk(entity));
-    blocks.get(pos) == Some(Block::AIR) && !occupied
+    let replaceable = blocks
+        .get(pos)
+        .is_some_and(|block| block == Block::AIR || block.is_fluid());
+    replaceable && !occupied
 }
 
 /// The server's check of a client's `EditBlock`: within reach of where the server

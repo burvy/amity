@@ -10,15 +10,16 @@
 //!    layers are faded by how far inland the column is, so they vanish at the
 //!    coast and sea floors stay smooth.
 //! 3. **Blocks from height.** Going down a column from the ground: one grass
-//!    block, `dirt_depth` dirt blocks, then stone forever. Above is air. Sea floors
-//!    (continentalness below the coast) get sand instead of grass and dirt.
+//!    block, `dirt_depth` dirt blocks, then stone forever. Above the ground is
+//!    water up to `sea_level`, then air. Ground at or below sea level gets sand
+//!    instead of grass and dirt (sea floors and beaches).
 //!
 //! Noise is deterministic: the same seed and position always give the same value,
 //! so chunks can be generated in any order, on any thread, and still line up at
 //! their borders.
 //!
 //! Only height per column exists for now, so there are no overhangs or caves;
-//! those need 3D noise, which comes later. Oceans are dry until water levels exist.
+//! those need 3D noise, which comes later. So do lakes above sea level.
 //!
 //! # Fractal noise (fBm)
 //!
@@ -58,6 +59,9 @@ pub struct Terrain(Arc<TerrainInner>);
 struct TerrainInner {
     /// blocks, see `WorldGenSettings::dirt_depth`
     dirt_depth: i32,
+    /// in blocks: blocks below this height and above the ground are water.
+    /// e.g. sea level 0 m: water up to block -1, whose top is at 0 m
+    sea: i32,
     /// continentalness, -1..1
     continents: Fbm<Perlin>,
     /// see `Continents::shape`
@@ -83,7 +87,7 @@ struct Layer {
 pub struct Column {
     /// Ground height in blocks: the y of the first air block
     pub height: i32,
-    /// Below the coast: topped with sand instead of grass
+    /// Ground at or below sea level: topped with sand instead of grass
     pub sea_floor: bool,
 }
 
@@ -143,6 +147,7 @@ impl Terrain {
         let continents = &settings.continents;
         Self(Arc::new(TerrainInner {
             dirt_depth: settings.dirt_depth,
+            sea: (settings.sea_level / BLOCK_SIZE as f64).round() as i32,
             continents: fractal(&continents.noise, settings.seed),
             shape: continents.shape.clone(),
             coast: continents.coast,
@@ -189,11 +194,14 @@ impl Terrain {
             .sum();
         let metres = base + pushes;
 
+        // back to whole blocks: 9.55 m / 0.5 = 19.1, rounds to 19. So blocks up to
+        // 18 are ground, 18 is the top one, and 19 (9.5 m) is the first air
+        let height = (metres / BLOCK_SIZE as f64).round() as i32;
         Column {
-            // back to whole blocks: 9.55 m / 0.5 = 19.1, rounds to 19. So blocks
-            // up to 18 are ground, 18 is the top one, and 19 (9.5 m) is the first air
-            height: (metres / BLOCK_SIZE as f64).round() as i32,
-            sea_floor: continentalness < self.0.coast,
+            height,
+            // ground whose top is at or below the sea's surface: under water, or a
+            // beach right at the waterline
+            sea_floor: height <= self.0.sea,
         }
     }
 
@@ -207,11 +215,16 @@ impl Terrain {
         Vec3::new(xz.x, self.column_at(x, z).height as f32 * BLOCK_SIZE, xz.y)
     }
 
-    /// The nearest point to `from` (metres) that is on land, searching outward in
+    /// The nearest point to `from` (metres) that is dry land, searching outward in
     /// rings 64 m apart. Used for spawn, which shouldn't be at the bottom of an
     /// ocean. Only if there's no land within 50 km does it give up and use `from`
     pub fn nearest_land(&self, from: Vec2) -> Vec2 {
-        let on_land = |xz: Vec2| self.continentalness(xz.x as f64, xz.y as f64) > self.0.coast;
+        // dry: the ground's top is above the sea's surface
+        let on_land = |xz: Vec2| {
+            let x = (xz.x / BLOCK_SIZE).floor() as i32;
+            let z = (xz.y / BLOCK_SIZE).floor() as i32;
+            self.column_at(x, z).height > self.0.sea
+        };
         if on_land(from) {
             return from;
         }
@@ -237,8 +250,11 @@ impl Terrain {
         // e.g. height 19, dirt_depth 3: y 19+ air, 18 grass, 17..=15 dirt, 14- stone
         let depth = column.height - 1 - y;
         match depth {
+            // above the ground: water below the sea's surface, air above it.
+            // e.g. ground height -6: blocks -6..=-1 are water, 0 and up air
+            ..0 if y < self.0.sea => Block::WATER,
             ..0 => Block::AIR,
-            // sea floors: sand where land would have grass and dirt
+            // at or below sea level: sand where land would have grass and dirt
             d if column.sea_floor && d <= self.0.dirt_depth => Block::SAND,
             0 => Block::GRASS,
             d if d <= self.0.dirt_depth => Block::DIRT,
@@ -264,12 +280,13 @@ impl Terrain {
             }
         }
 
-        // Shortcut: most chunks are entirely sky or entirely underground. Compare
-        // the chunk's vertical span (world block heights `bottom..=top`) with the
-        // lowest and highest ground in it:
+        // Shortcut: most chunks are entirely sky, sea or underground. Compare the
+        // chunk's vertical span (world block heights `bottom..=top`) with the
+        // lowest and highest ground in it, and the sea's surface:
         //
-        //   bottom >= highest    every block is at or above every column's first
-        //                        air block: all air
+        //   bottom >= highest    no ground anywhere in the chunk. Then it's all air
+        //                        if it starts at or above the sea's surface, or all
+        //                        water if it ends below it
         //   top below the dirt   every block is deeper than the grass and dirt (or
         //   of the lowest column sand) of even the lowest column: all stone
         //
@@ -278,8 +295,11 @@ impl Terrain {
         let highest = columns.iter().map(|column| column.height).max().unwrap();
         let bottom = origin.y;
         let top = origin.y + CHUNK_SIZE - 1;
-        if bottom >= highest {
+        if bottom >= highest && bottom >= self.0.sea {
             return Chunk::Uniform(Block::AIR);
+        }
+        if bottom >= highest && top < self.0.sea {
+            return Chunk::Uniform(Block::WATER);
         }
         // the lowest column's top block is at `lowest - 1` and its dirt goes
         // `dirt_depth` further down; anything below that is stone everywhere
@@ -287,8 +307,9 @@ impl Terrain {
             return Chunk::Uniform(Block::STONE);
         }
 
-        // Step 2: the chunk crosses the surface somewhere, so fill it column by
-        // column. `Chunk::default()` is all air, so air blocks need no work
+        // Step 2: the chunk crosses the ground or the sea's surface somewhere, so
+        // fill it column by column. `Chunk::default()` is all air, so air blocks
+        // need no work
         let mut chunk = Chunk::default();
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
@@ -391,6 +412,27 @@ mod tests {
     fn spawn_search_finds_land() {
         let terrain = Terrain::new(&WorldGenSettings::default());
         let land = terrain.nearest_land(Vec2::ZERO);
-        assert!(terrain.continentalness(land.x as f64, land.y as f64) > terrain.0.coast);
+        assert!(terrain.surface_point(land).y > 0.0);
+    }
+
+    #[test]
+    fn oceans_fill_to_sea_level() {
+        let terrain = Terrain::new(&WorldGenSettings::default());
+        let deep = Column {
+            height: -10,
+            sea_floor: true,
+        };
+        assert_eq!(terrain.block(deep, 0), Block::AIR);
+        assert_eq!(terrain.block(deep, -1), Block::WATER);
+        assert_eq!(terrain.block(deep, -10), Block::WATER);
+        assert_eq!(terrain.block(deep, -11), Block::SAND);
+
+        // a world that is all ocean, 40 m deep: whole chunks of water and of air
+        let mut settings = WorldGenSettings::default();
+        settings.continents.shape = vec![(-1.0, -40.0), (1.0, -40.0)];
+        settings.layers.clear();
+        let ocean = Terrain::new(&settings);
+        assert_eq!(ocean.generate(ChunkPos(IVec3::new(3, -1, 3))), Chunk::Uniform(Block::WATER));
+        assert_eq!(ocean.generate(ChunkPos(IVec3::new(3, 0, 3))), Chunk::Uniform(Block::AIR));
     }
 }

@@ -13,7 +13,11 @@ use bevy::{
     tasks::{futures::check_ready, AsyncComputeTaskPool, Task},
 };
 
-use super::{material::ChunkMaterial, mesher::{chunk_mesh, FACES}, padded::PaddedChunk};
+use super::{
+    material::ChunkMaterials,
+    mesher::{chunk_mesh, ChunkMeshes, FACES},
+    padded::PaddedChunk,
+};
 
 /// Marks a chunk for (re)meshing
 #[derive(Component)]
@@ -22,7 +26,13 @@ pub struct NeedsMesh;
 /// A mesh being built off the main thread. Replacing or removing this drops the
 /// task, which cancels it, so an outdated mesh can never land.
 #[derive(Component)]
-pub struct MeshTask(Task<Mesh>);
+pub struct MeshTask(Task<ChunkMeshes>);
+
+/// The child entity drawing a chunk's fluids. An entity has one mesh and one
+/// material, so the chunk draws its solid blocks and this child its water.
+/// Despawned with the chunk
+#[derive(Component)]
+pub struct FluidMesh(Entity);
 
 /// A chunk is meshed once it and all six face neighbours are loaded: its border
 /// faces depend on them, so meshing sooner would be redone as each one arrives.
@@ -70,18 +80,22 @@ pub fn mark_dirty(
 /// async compute pool. All-air chunks have nothing to draw and skip it.
 pub fn start_mesh_tasks(
     mut cmds: Commands,
-    dirty: Query<(Entity, &ChunkPos, &Chunk), With<NeedsMesh>>,
+    dirty: Query<(Entity, &ChunkPos, &Chunk, Option<&FluidMesh>), With<NeedsMesh>>,
     chunks: Query<&Chunk>,
     index: Res<ChunkIndex>,
 ) {
     let pool = AsyncComputeTaskPool::get();
-    for (entity, pos, chunk) in &dirty {
-        let mut entity = cmds.entity(entity);
-        entity.remove::<NeedsMesh>();
+    for (entity, pos, chunk, fluid) in &dirty {
         if *chunk == Chunk::Uniform(Block::AIR) {
-            entity.remove::<(MeshTask, Mesh3d)>();
+            if let Some(FluidMesh(child)) = fluid {
+                cmds.entity(*child).despawn();
+            }
+            cmds.entity(entity)
+                .remove::<(NeedsMesh, MeshTask, Mesh3d, FluidMesh)>();
             continue;
         }
+        let mut entity = cmds.entity(entity);
+        entity.remove::<NeedsMesh>();
         let padded = PaddedChunk::new(chunk, |offset| {
             index
                 .get(ChunkPos(pos.0 + offset))
@@ -91,26 +105,53 @@ pub fn start_mesh_tasks(
     }
 }
 
-/// Swaps in finished meshes
+/// Swaps in finished meshes: the solid one on the chunk itself, the fluid one on
+/// its `FluidMesh` child, which is spawned the first time a chunk has water and
+/// despawned when it no longer does
 pub fn finish_mesh_tasks(
     mut cmds: Commands,
-    mut tasks: Query<(Entity, &mut MeshTask)>,
+    mut tasks: Query<(Entity, &mut MeshTask, Option<&FluidMesh>)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    material: Res<ChunkMaterial>,
+    materials: Res<ChunkMaterials>,
 ) {
-    for (entity, mut task) in &mut tasks {
-        let Some(mesh) = check_ready(&mut task.0) else {
+    for (chunk, mut task, fluid_child) in &mut tasks {
+        let Some(ChunkMeshes { solid, fluid }) = check_ready(&mut task.0) else {
             continue;
         };
-        let mut entity = cmds.entity(entity);
+        let mut entity = cmds.entity(chunk);
         entity.remove::<MeshTask>();
-        if mesh.count_vertices() == 0 {
+        if solid.count_vertices() == 0 {
             entity.remove::<Mesh3d>();
         } else {
             entity.insert((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(material.0.clone()),
+                Mesh3d(meshes.add(solid)),
+                MeshMaterial3d(materials.solid.clone()),
             ));
+        }
+
+        match (fluid.count_vertices() == 0, fluid_child) {
+            // no water, no child: nothing to do
+            (true, None) => {}
+            // the water is gone
+            (true, Some(FluidMesh(child))) => {
+                cmds.entity(*child).despawn();
+                cmds.entity(chunk).remove::<FluidMesh>();
+            }
+            // water changed: swap the child's mesh
+            (false, Some(FluidMesh(child))) => {
+                cmds.entity(*child).insert(Mesh3d(meshes.add(fluid)));
+            }
+            // first water in this chunk: a child at the chunk's origin to draw it
+            (false, None) => {
+                let child = cmds
+                    .spawn((
+                        Mesh3d(meshes.add(fluid)),
+                        MeshMaterial3d(materials.fluid.clone()),
+                        ChildOf(chunk),
+                    ))
+                    .id();
+                cmds.entity(chunk).insert(FluidMesh(child));
+            }
         }
     }
 }

@@ -6,9 +6,14 @@ use bevy::{
 
 use super::textures::ATLAS;
 
-/// Shared by every chunk: the block texture atlas
+/// Shared by every chunk. Both use the block texture atlas
 #[derive(Resource)]
-pub struct ChunkMaterial(pub Handle<StandardMaterial>);
+pub struct ChunkMaterials {
+    /// solid blocks
+    pub solid: Handle<StandardMaterial>,
+    /// fluids: blended with what's behind them by the texture's alpha
+    pub fluid: Handle<StandardMaterial>,
+}
 
 pub fn init_chunk_material(
     mut cmds: Commands,
@@ -25,9 +30,22 @@ pub fn init_chunk_material(
         RenderAssetUsages::RENDER_WORLD,
     )
     .expect("the atlas is generated at build time, so it must be a valid png");
-    cmds.insert_resource(ChunkMaterial(mats.add(StandardMaterial {
-        base_color_texture: Some(images.add(atlas)),
-        perceptual_roughness: 0.25,
-        ..default()
-    })));
+    let atlas = images.add(atlas);
+    cmds.insert_resource(ChunkMaterials {
+        solid: mats.add(StandardMaterial {
+            base_color_texture: Some(atlas.clone()),
+            perceptual_roughness: 0.25,
+            ..default()
+        }),
+        fluid: mats.add(StandardMaterial {
+            base_color_texture: Some(atlas),
+            perceptual_roughness: 0.1,
+            // see-through, using the png's alpha
+            alpha_mode: AlphaMode::Blend,
+            // the surface is also seen from underneath, when underwater
+            double_sided: true,
+            cull_mode: None,
+            ..default()
+        }),
+    });
 }

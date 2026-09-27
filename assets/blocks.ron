@@ -5,7 +5,9 @@
 //
 // Fields (only `name` is required):
 //   name:     lowercase letters, digits and _. Also its texture file's name
-//   solid:    false for blocks you can walk through. Default true
+//   solid:    false for blocks you can walk through. Default true (false for fluids)
+//   fluid:    true for water and the like: walked through, drawn see-through
+//             (the png's alpha is used), and blocks can be placed into it
 //   textures: (top: "...", side: "...", bottom: "...") picks a png per face,
 //             by file name without .png. Faces left out use the block's name.
 //             e.g. (name: "grass", textures: (top: "grass_top", bottom: "dirt"))
@@ -20,4 +22,5 @@
     (name: "sand"),
     (name: "gravel"),
     (name: "snow"),
+    (name: "water", fluid: true),
 ]

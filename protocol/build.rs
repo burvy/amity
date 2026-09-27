@@ -15,8 +15,10 @@ const TEXTURES: &str = "../assets/images/blocks";
 #[derive(Deserialize)]
 struct BlockEntry {
     name: String,
-    #[serde(default = "yes")]
-    solid: bool,
+    /// None: solid unless it's a fluid
+    solid: Option<bool>,
+    #[serde(default)]
+    fluid: bool,
     #[serde(default)]
     textures: Textures,
 }
@@ -26,10 +28,6 @@ struct Textures {
     top: Option<String>,
     side: Option<String>,
     bottom: Option<String>,
-}
-
-fn yes() -> bool {
-    true
 }
 
 fn main() {
@@ -44,7 +42,7 @@ fn main() {
     // air is always id 0: not solid, never drawn, so it has no textures
     let mut consts = String::from("    pub const AIR: Block = Block(0);\n");
     let mut defs = String::from(
-        "    BlockDef { name: \"air\", solid: false, top: \"\", side: \"\", bottom: \"\" },\n",
+        "    BlockDef { name: \"air\", solid: false, fluid: false, top:\"\", side: \"\", bottom: \"\" },\n",
     );
     for (i, entry) in entries.iter().enumerate() {
         let name = &entry.name;
@@ -58,6 +56,9 @@ fn main() {
         );
         assert!(name != "air", "{BLOCKS}: air is built in, remove it from the list");
         assert!(seen.insert(name.clone()), "{BLOCKS}: {name} is listed twice");
+        // fluids are never solid: players move through them and see through them
+        let solid = entry.solid.unwrap_or(!entry.fluid);
+        assert!(!(solid && entry.fluid), "{BLOCKS}: {name} can't be both solid and a fluid");
 
         // each face: the named texture, or the block's own name
         let face = |texture: &Option<String>| {
@@ -77,8 +78,8 @@ fn main() {
 
         consts += &format!("    pub const {}: Block = Block({id});\n", name.to_uppercase());
         defs += &format!(
-            "    BlockDef {{ name: {name:?}, solid: {}, top: {top:?}, side: {side:?}, bottom: {bottom:?} }},\n",
-            entry.solid
+            "    BlockDef {{ name: {name:?}, solid: {solid}, fluid: {}, top: {top:?}, side: {side:?}, bottom: {bottom:?} }},\n",
+            entry.fluid
         );
     }
 

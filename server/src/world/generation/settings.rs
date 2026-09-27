@@ -13,8 +13,11 @@ pub struct WorldGenSettings {
     /// Picks which world you get. Same seed + same settings = the same world,
     /// block for block, every time
     pub seed: u32,
-    /// Blocks of dirt between the grass and the stone (and of sand on sea floors)
+    /// Blocks of dirt between the grass and the stone (and of sand under water)
     pub dirt_depth: i32,
+    /// Height of the ocean's surface (metres). Every column whose ground is below
+    /// it is filled with water up to here. Lakes above sea level come later
+    pub sea_level: f64,
     /// Where land and ocean are, and the base height of each. See `Continents`
     pub continents: Continents,
     /// Noise layers added on top of the continents' base height. See `NoiseLayer`
@@ -26,6 +29,7 @@ impl Default for WorldGenSettings {
         Self {
             seed: 0,
             dirt_depth: 3,
+            sea_level: 0.0,
             continents: Continents {
                 noise: Fractal {
                     scale: 3000.0,
@@ -88,8 +92,8 @@ pub struct Continents {
     /// flat lowlands). Islands appear wherever the noise pokes above the coast
     /// point out in an ocean
     pub shape: Vec<(f64, f64)>,
-    /// Continentalness of the shoreline: below it is sea floor (topped with sand
-    /// instead of grass). Should match where `shape` crosses about 0 m
+    /// Continentalness of the shoreline, where `inland` layers start fading in.
+    /// Should match where `shape` crosses sea level
     pub coast: f64,
     /// Continentalness where `inland` layers reach full strength. They fade in
     /// from nothing at `coast`, so sea floors stay smooth and hills rise away

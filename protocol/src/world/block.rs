@@ -19,6 +19,7 @@ pub struct Block(u16);
 struct BlockDef {
     name: &'static str,
     solid: bool,
+    fluid: bool,
     /// texture file names (no .png) per face
     top: &'static str,
     side: &'static str,
@@ -51,6 +52,12 @@ impl Block {
     /// Whether players collide with it, and whether it hides its neighbours' faces
     pub fn is_solid(self) -> bool {
         self.def().solid
+    }
+
+    /// Water and the like: not solid, drawn see-through, and a block can be
+    /// placed into it
+    pub fn is_fluid(self) -> bool {
+        self.def().fluid
     }
 
     /// The texture file name (no .png) on the face pointing along `normal`

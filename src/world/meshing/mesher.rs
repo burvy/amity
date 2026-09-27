@@ -1,6 +1,9 @@
 //! Builds a chunk's mesh: one textured square per visible block face
 
-use amity_protocol::world::config::{BLOCK_SIZE, CHUNK_SIZE};
+use amity_protocol::world::{
+    block::Block,
+    config::{BLOCK_SIZE, CHUNK_SIZE},
+};
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
@@ -51,54 +54,89 @@ pub const FACES: [Face; 6] = [
 /// `tile_uv` then maps into the block's atlas tile.
 const FACE_UVS: [[f32; 2]; 4] = [[0., 1.], [1., 1.], [1., 0.], [0., 0.]];
 
-/// Face-culled mesh: a face is emitted only where the neighbouring block is air,
-/// including across chunk borders.
-pub fn chunk_mesh(chunk: &PaddedChunk) -> Mesh {
-    let mut positions = Vec::new();
-    let mut normals = Vec::new();
-    let mut uvs = Vec::new();
-    let mut indices = Vec::new();
+/// A chunk's two meshes. They're drawn with different materials: fluids are
+/// see-through, and see-through surfaces must be drawn after (and sorted apart
+/// from) everything solid
+pub struct ChunkMeshes {
+    /// every solid block's visible faces
+    pub solid: Mesh,
+    /// every fluid block's surfaces: only where the fluid meets air
+    pub fluid: Mesh,
+}
+
+/// Face-culled meshes: a face is emitted only where it can be seen, including
+/// across chunk borders.
+///
+/// - a solid block's face shows unless the block next to it is solid. So stone
+///   under water still draws its faces, which you see through the water
+/// - a fluid block's face shows only where it touches air. Water next to water
+///   draws nothing, so a lake is one surface, not a grid of cubes, and water
+///   against stone is hidden by the stone
+pub fn chunk_mesh(chunk: &PaddedChunk) -> ChunkMeshes {
+    let mut solid = MeshBuilder::default();
+    let mut fluid = MeshBuilder::default();
 
     for y in 0..CHUNK_SIZE {
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 let local = IVec3::new(x, y, z);
                 let block = chunk.get(local);
-                if !block.is_solid() {
-                    continue;
-                }
                 for face in &FACES {
-                    if chunk.get(local + face.normal).is_solid() {
-                        continue;
+                    let neighbour = chunk.get(local + face.normal);
+                    if block.is_solid() && !neighbour.is_solid() {
+                        solid.face(local, face, face_tile(block, face.normal));
+                    } else if block.is_fluid() && neighbour == Block::AIR {
+                        fluid.face(local, face, face_tile(block, face.normal));
                     }
-
-                    let base = positions.len() as u32;
-                    let offset = local.as_vec3();
-                    for corner in face.corners {
-                        positions.push(((offset + Vec3::from(corner)) * BLOCK_SIZE).to_array());
-                    }
-                    normals.extend([face.normal.as_vec3().to_array(); 4]);
-                    let tile = face_tile(block, face.normal);
-                    uvs.extend(FACE_UVS.map(|uv| tile_uv(tile, uv)));
-                    indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
                 }
             }
         }
     }
 
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-    .with_inserted_indices(Indices::U32(indices))
+    ChunkMeshes {
+        solid: solid.build(),
+        fluid: fluid.build(),
+    }
+}
+
+/// Collects faces into one mesh's vertex lists
+#[derive(Default)]
+struct MeshBuilder {
+    positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    uvs: Vec<[f32; 2]>,
+    indices: Vec<u32>,
+}
+
+impl MeshBuilder {
+    /// Adds one block face: 4 corners, 2 triangles, textured with atlas `tile`
+    fn face(&mut self, local: IVec3, face: &Face, tile: u32) {
+        let base = self.positions.len() as u32;
+        let offset = local.as_vec3();
+        for corner in face.corners {
+            self.positions.push(((offset + Vec3::from(corner)) * BLOCK_SIZE).to_array());
+        }
+        self.normals.extend([face.normal.as_vec3().to_array(); 4]);
+        self.uvs.extend(FACE_UVS.map(|uv| tile_uv(tile, uv)));
+        // two triangles sharing the diagonal from corner 0 to corner 2
+        self.indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    fn build(self) -> Mesh {
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs)
+        .with_inserted_indices(Indices::U32(self.indices))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use amity_protocol::world::{block::Block, chunk::Chunk};
+    use amity_protocol::world::chunk::Chunk;
 
     use super::*;
 
@@ -116,11 +154,11 @@ mod tests {
     fn culls_hidden_faces() {
         let mut chunk = Chunk::default();
         chunk.set(IVec3::ZERO, Block::STONE);
-        let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
+        let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None)).solid;
         assert_eq!(mesh.count_vertices(), 6 * 4);
 
         chunk.set(IVec3::X, Block::STONE);
-        let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
+        let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None)).solid;
         assert_eq!(mesh.count_vertices(), 10 * 4);
     }
 
@@ -136,7 +174,7 @@ mod tests {
             other.set(across, Block::STONE);
 
             let padded = PaddedChunk::new(&chunk, |o| (o == face.normal).then_some(&other));
-            assert_eq!(chunk_mesh(&padded).count_vertices(), 5 * 4, "{:?}", face.normal);
+            assert_eq!(chunk_mesh(&padded).solid.count_vertices(), 5 * 4, "{:?}", face.normal);
         }
     }
 
@@ -147,8 +185,8 @@ mod tests {
         let mut east = Chunk::default();
         east.set(IVec3::ZERO, Block::STONE);
 
-        let alone = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
-        let joined = chunk_mesh(&PaddedChunk::new(&chunk, |o| (o == IVec3::X).then_some(&east)));
+        let alone = chunk_mesh(&PaddedChunk::new(&chunk, |_| None)).solid;
+        let joined = chunk_mesh(&PaddedChunk::new(&chunk, |o| (o == IVec3::X).then_some(&east))).solid;
         assert_eq!(alone.count_vertices(), 6 * 4);
         assert_eq!(joined.count_vertices(), 5 * 4);
     }
@@ -156,7 +194,21 @@ mod tests {
     #[test]
     fn solid_chunk_surrounded_by_solid_has_no_faces() {
         let stone = Chunk::Uniform(Block::STONE);
-        let mesh = chunk_mesh(&PaddedChunk::new(&stone, |_| Some(&stone)));
+        let mesh = chunk_mesh(&PaddedChunk::new(&stone, |_| Some(&stone))).solid;
         assert_eq!(mesh.count_vertices(), 0);
+    }
+
+    #[test]
+    fn water_shows_only_where_it_meets_air() {
+        // two water blocks side by side, stone underneath one of them
+        let mut chunk = Chunk::default();
+        chunk.set(IVec3::new(1, 1, 1), Block::WATER);
+        chunk.set(IVec3::new(2, 1, 1), Block::WATER);
+        chunk.set(IVec3::new(1, 0, 1), Block::STONE);
+        let meshes = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
+        // 2 water blocks * 6 faces, minus the 2 they share, minus the 1 on stone
+        assert_eq!(meshes.fluid.count_vertices(), 9 * 4);
+        // the stone shows all 6 faces: water doesn't hide them
+        assert_eq!(meshes.solid.count_vertices(), 6 * 4);
     }
 }
