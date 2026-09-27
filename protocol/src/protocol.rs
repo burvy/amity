@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use avian3d::{
     dynamics::{rigid_body::LinearVelocity, solver::islands::IslandSleepingPlugin},
     interpolation::PhysicsInterpolationPlugin,
-    physics_transform::{PhysicsTransformPlugin, Position},
+    physics_transform::{PhysicsTransformConfig, PhysicsTransformPlugin, Position},
     PhysicsPlugins,
 };
 use bevy::{ecs::entity::MapEntities, prelude::*};
@@ -73,6 +73,14 @@ impl Plugin for ProtocolPlugin {
                 .disable::<PhysicsTransformPlugin>(),
             LightyearAvianPlugin::default(), // MUST be added manually
         ));
+        // Nothing here is moved through Transform, so don't copy Transform into
+        // Position. That copy runs after rollback and restored last frame's stale
+        // Transform over the corrected Position, so predicted players that got
+        // pushed out of place were never corrected (lightyear_avian3d plugin.rs TODO)
+        app.insert_resource(PhysicsTransformConfig {
+            transform_to_position: false,
+            ..default()
+        });
 
         app.add_plugins(InputPlugin::<PlayerInputs> {
             config: InputConfig {
