@@ -1,0 +1,10 @@
+use bevy::prelude::*;
+
+/// Chunks generated beyond what players can see (x, y, z, in chunks). Bigger
+/// means players can move faster without catching up to generation, but more
+/// chunks sit in memory
+pub const PREGEN_MARGIN: IVec3 = IVec3::new(4, 2, 4);
+
+/// Chunks generated at the same time. Higher fills the world faster but uses
+/// more CPU while it does
+pub const MAX_GENERATING: usize = 32;

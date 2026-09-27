@@ -1,12 +1,14 @@
+use amity_protocol::{
+    player::definition::PlayerInputs,
+    world::{
+        blocks::Blocks,
+        edit::{player_edit, EditAction},
+        messages::{BlockChanged, EditBlock, EditChannel},
+    },
+};
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use lightyear::prelude::{
-    input::native::ActionState, Controlled, MessageReceiver, MessageSender,
-};
-use amity_protocol::{
-    protocol::PlayerInputs,
-    world::edit::{self, BlockChanged, Blocks, EditAction, EditBlock, EditChannel},
-};
+use lightyear::prelude::{input::native::ActionState, Controlled, MessageReceiver, MessageSender};
 
 /// Asks the server to make our player's edits. Nothing changes locally until the
 /// server's `BlockChanged` arrives, so the client's world is only ever the server's.
@@ -29,8 +31,7 @@ pub fn request_edits(
     } else {
         return;
     };
-    let Some((pos, block)) =
-        edit::player_edit(edit_action, player, position.0, input.look, &spatial, &blocks)
+    let Some((pos, block)) = player_edit(edit_action, player, position.0, input.look, &spatial, &blocks)
     else {
         return;
     };

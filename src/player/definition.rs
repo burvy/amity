@@ -2,10 +2,7 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
 
-/// Mouse sensitivity constant
-/// Can be kept client side for now since it should be configurable later
-/// TODO: Make configurable
-const SENSITIVITY: f32 = 0.0025;
+use super::config::SENSITIVITY;
 
 /// Resource to store client-side player info
 #[derive(Resource, Default)]

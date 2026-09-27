@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use lightyear::core::tick::Tick;
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::TIMESTEP;
+use crate::net::config::TIMESTEP;
 
 #[derive(Component, Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Interactable {

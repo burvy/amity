@@ -5,7 +5,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use crate::shared::EYE_HEIGHT;
+use super::config::EYE_HEIGHT;
 
 /// The first collider a player's look ray hits
 pub struct Aim {

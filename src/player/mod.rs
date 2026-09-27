@@ -1,15 +1,19 @@
-use bevy::prelude::*;
+//! Our player and the ones we see: input, camera, bodies, and the interact prompt
 
+use amity_protocol::player::{movement, step};
+use bevy::prelude::*;
+use lightyear::{input::client::InputSystems, prelude::Predicted};
+
+mod config;
 pub mod definition;
-pub mod logic;
+mod input;
+mod interact;
+mod logic;
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        // This only spawned a camera and we spawn a camera in `net.rs`
-        // app.add_systems(Startup, definition::player.spawn());
-
         app.insert_resource(definition::PlayerInfo {
             look: Vec2::ZERO,
             paused: true,
@@ -21,7 +25,7 @@ impl Plugin for PlayerPlugin {
             (definition::spawn_camera, definition::spawn_interact_prompt),
         );
 
-        let grab_on_click = logic::grab_on_click;
+        let grab_on_click = input::grab_on_click;
         // stop clicking egui from unpausing the game
         // TODO: possibly better to make a new window
         #[cfg(feature = "dev-local")]
@@ -35,12 +39,33 @@ impl Plugin for PlayerPlugin {
             Update,
             (
                 grab_on_click,
-                logic::pause_on_esc,
-                (logic::rotate_player_resource,
-                logic::camera_follow_player).chain(),
-                logic::client_interaction_checker,
-                logic::can_interact_prompt,
+                input::pause_on_esc,
+                (input::rotate_player_resource, logic::camera_follow_player).chain(),
+                interact::client_interaction_checker,
+                interact::can_interact_prompt,
+                // players replicated to us get a body to simulate and a mesh to see
+                logic::add_physics,
+                logic::draw_players,
             ),
+        );
+
+        app.add_observer(logic::detect_replicate_player);
+        app.add_observer(logic::detect_replicate_our_player);
+
+        // Client-server interface (tick rate update)
+        app.add_systems(
+            FixedPreUpdate,
+            input::buffer_input.in_set(InputSystems::WriteClientInputs),
+        );
+
+        // Simulate players
+        app.add_systems(
+            FixedUpdate,
+            (
+                movement::player_motion::<With<Predicted>>,
+                step::step_up::<With<Predicted>>,
+            )
+                .chain(),
         );
     }
 }

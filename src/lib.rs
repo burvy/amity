@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 mod net;
 mod player;
+mod stuff;
 mod world;
 
 // This section below allows the game to render on the web
@@ -32,11 +33,12 @@ pub struct MainPlugin;
 
 impl Plugin for MainPlugin {
     fn build(&self, app: &mut App) {
-        // brings physics with it, so the client can actually simulate
         app.add_plugins(player::PlayerPlugin);
+        app.add_plugins(stuff::StuffPlugin);
         app.add_plugins(world::WorldPlugin);
         app.add_plugins(net::NetPlugin);
-        app.add_plugins(amity_protocol::protocol::ProtocolPlugin);
+        // brings physics with it, so the client can actually simulate
+        app.add_plugins(amity_protocol::ProtocolPlugin);
 
         // dev-local only. EguiPlugin must come first - the inspector asserts
         // on it at startup rather than pulling it in itself.

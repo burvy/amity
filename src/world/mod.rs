@@ -1,34 +1,40 @@
+//! The client's copy of the voxel world: chunks and edits from the server,
+//! our edit requests, and drawing it all
+
 use bevy::prelude::*;
 use lightyear::core::timeline::is_in_rollback;
 
-pub mod definition;
-pub mod edit;
-pub mod mesh;
+mod chunks;
+mod definition;
+mod edit;
+mod meshing;
+
+/// The systems that apply what the server sent. Meshing runs after these
+#[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct ReceiveWorld;
 
 pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Startup,
-            (definition::spawn_light, mesh::init_chunk_material),
-        );
+        app.add_plugins(meshing::MeshingPlugin);
+        app.add_systems(Startup, definition::spawn_light);
+        // unloads before chunks, so a chunk dropped and resent in one frame ends up
+        // loaded; block changes last, so they land on chunks that arrived with them
         app.add_systems(
             Update,
             (
-                definition::receive_chunks,
+                chunks::receive_unloads,
+                chunks::receive_chunks,
                 edit::receive_block_changes,
-                mesh::mark_dirty,
-                mesh::start_mesh_tasks,
-                mesh::finish_mesh_tasks,
             )
-                .chain(),
+                .chain()
+                .in_set(ReceiveWorld),
         );
         // rollback replays FixedUpdate ticks; requesting again would repeat the edit
         app.add_systems(
             FixedUpdate,
             edit::request_edits.run_if(not(is_in_rollback)),
         );
-        app.add_systems(Update, definition::draw_interactables); // replicated things
     }
 }

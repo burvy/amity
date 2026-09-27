@@ -4,23 +4,31 @@
 
 use std::time::Duration;
 
+use amity_protocol::{net::config::TIMESTEP, ProtocolPlugin};
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*, state::app::StatesPlugin};
-use amity_protocol::protocol;
-mod generation;
-mod logic;
-mod server;
+
+mod connection;
+mod player;
+mod stuff;
+mod world;
 
 fn main() {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
-            protocol::TIMESTEP / 4.0, // run more often than timestep
+            TIMESTEP / 4.0, // run more often than timestep
         ))),
         TransformPlugin,
         StatesPlugin,
         LogPlugin::default(),
     ));
-    app.add_plugins(server::ServerPlugin);
-    app.add_plugins(protocol::ProtocolPlugin);
+    // connection first: it adds lightyear's server plugins, which the rest build on
+    app.add_plugins((
+        connection::ConnectionPlugin,
+        player::PlayerPlugin,
+        stuff::StuffPlugin,
+        world::WorldPlugin,
+    ));
+    app.add_plugins(ProtocolPlugin);
     app.run();
 }

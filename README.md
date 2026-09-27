@@ -25,8 +25,8 @@ The protocol points towawrds localhost instead of my server IP
 
 ## Inputs
 Remember that new player inputs must be added in `PlayerInputs` 
-which is in `protocol.rs` in PROTOCOL  
-The client gets to send input through `buffer_input` in `net.rs` 
+which is in `player/definition.rs` in PROTOCOL  
+The client gets to send input through `buffer_input` in `player/input.rs` 
 on the CLIENT
 
 ## Components

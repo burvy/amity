@@ -1,95 +1,54 @@
-use avian3d::prelude::*;
-use bevy::{
-    input::mouse::AccumulatedMouseMotion,
-    prelude::*,
-    window::{CursorGrabMode, CursorOptions, PrimaryWindow},
+use amity_protocol::player::{
+    config::{EYE_HEIGHT, PLAYER_LENGTH, PLAYER_RADIUS},
+    definition::{PlayerBody, PlayerInputs, PlayerMarker},
 };
-use lightyear::prelude::*;
-use amity_protocol::{aim, shared, stuff};
+use avian3d::prelude::*;
+use bevy::prelude::*;
+use lightyear::prelude::{input::native::InputMarker, *};
 
-use crate::player::definition;
+use super::definition::{MainPlayerCamera, PlayerInfo};
 
-/// Unlock on escape
-pub fn pause_on_esc(
-    mut cursor_options: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    mut player_info: ResMut<definition::PlayerInfo>,
-    key: Res<ButtonInput<KeyCode>>,
+/// Insert physics onto player upon being newly predicted
+pub fn add_physics(
+    mut cmds: Commands,
+    players: Query<Entity, (Added<Predicted>, With<PlayerMarker>)>,
 ) {
-    if key.just_pressed(KeyCode::Escape) && !player_info.paused {
-        player_info.paused = true;
-        cursor_options.grab_mode = CursorGrabMode::None;
-        cursor_options.visible = true;
+    for player in players.iter() {
+        cmds.entity(player).insert(
+            PlayerBody::default(), // add ONCE
+        );
     }
 }
 
-/// Lock on left click
-pub fn grab_on_click(
-    mut cursor_options: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    mut player_info: ResMut<definition::PlayerInfo>,
-    buttons: Res<ButtonInput<MouseButton>>,
+/// Insert player model onto player upon being newly predicted
+pub fn draw_players(
+    mut cmds: Commands,
+    players: Query<Entity, (Added<Predicted>, With<PlayerMarker>)>,
 ) {
-    if player_info.paused && buttons.just_pressed(MouseButton::Left) {
-        player_info.paused = false;
-        cursor_options.grab_mode = CursorGrabMode::Locked;
-        cursor_options.visible = false;
+    for player in players.iter() {
+        cmds.entity(player).queue_apply_scene(bsn! {
+            Mesh3d(asset_value(Capsule3d::new(PLAYER_RADIUS, PLAYER_LENGTH)))
+            MeshMaterial3d::<StandardMaterial>(asset_value(Color::WHITE))
+        });
     }
 }
 
-/// Stores the accumulated mouse motion in the PlayerInfo resource
-pub fn rotate_player_resource(
-    mut look_res: ResMut<definition::PlayerInfo>,
-    mouse_mot_res: Res<AccumulatedMouseMotion>,
-) {
-    if !look_res.paused {
-        look_res.update_look(mouse_mot_res.delta);
-    }
+/// Logic to run when any player joining is detected
+pub fn detect_replicate_player(player: On<Add, PlayerMarker>) {
+    info!("Player {:?} was replicated to me!", player.entity);
+}
+
+/// Logic to run when our designated controlled player joins
+pub fn detect_replicate_our_player(our_player: On<Add, Controlled>, mut cmds: Commands) {
+    cmds.entity(our_player.entity)
+        .insert(InputMarker::<PlayerInputs>::default());
 }
 
 pub fn camera_follow_player(
-    mut camera: Single<&mut Transform, With<definition::MainPlayerCamera>>,
+    mut camera: Single<&mut Transform, With<MainPlayerCamera>>,
     player: Single<&Position, With<Controlled>>,
-    look_res: Res<definition::PlayerInfo>,
+    look_res: Res<PlayerInfo>,
 ) {
-    camera.translation = player.0 + Vec3::Y * shared::EYE_HEIGHT;
+    camera.translation = player.0 + Vec3::Y * EYE_HEIGHT;
     camera.rotation = Quat::from_euler(EulerRot::YXZ, look_res.look.x, look_res.look.y, 0.0);
-}
-
-/// Sets can_interact to true on PlayerInfo if lookng at an entity that contains Interactable
-pub fn client_interaction_checker(
-    spatial: SpatialQuery,
-    mut player_info: ResMut<definition::PlayerInfo>,
-    player: Single<(Entity, &Position), With<Controlled>>,
-    interactables: Query<&stuff::definition::Interactable>,
-    timeline: Res<LocalTimeline>,
-) {
-    let (player, position) = player.into_inner();
-
-    let tick = timeline.tick();
-    let should_interact = aim::aim(
-        &spatial,
-        player,
-        position.0,
-        player_info.look,
-        shared::INTERACT_DISTANCE,
-    )
-    .is_some_and(|aim| interactables.get(aim.entity).is_ok_and(|i| i.ready(tick)));
-
-    if player_info.can_interact != should_interact {
-        player_info.can_interact = should_interact
-    }
-}
-
-pub fn can_interact_prompt(
-    mut prompt_visibility: Single<&mut Visibility, With<definition::InteractionPrompt>>,
-    player_info: Res<definition::PlayerInfo>,
-) {
-    let target = if player_info.can_interact {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-
-    if **prompt_visibility != target {
-        **prompt_visibility = target;
-    }
 }
