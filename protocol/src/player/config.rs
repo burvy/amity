@@ -33,7 +33,7 @@ pub const GROUND_TOLERANCE: f32 = 0.1;
 pub const INTERACT_DISTANCE: f32 = 4.0;
 
 /// Highest ledge a player walks onto without jumping: one block, plus a margin
-pub const STEP_HEIGHT: f32 = BLOCK_SIZE + 0.05;
+pub const STEP_HEIGHT: f32 = BLOCK_SIZE + 0.1;
 /// Step casts start this far above the body so the ground it rests on doesn't
 /// count as an obstacle
-pub const STEP_SKIN: f32 = 0.02;
+pub const STEP_SKIN: f32 = 0.05;

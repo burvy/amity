@@ -42,10 +42,13 @@ impl Plugin for MainPlugin {
 
         // dev-local only. EguiPlugin must come first - the inspector asserts
         // on it at startup rather than pulling it in itself.
+        // Hidden until F3: it walks every entity each frame, and every chunk is one
         #[cfg(feature = "dev-local")]
         app.add_plugins((
             bevy_inspector_egui::bevy_egui::EguiPlugin::default(),
-            bevy_inspector_egui::quick::WorldInspectorPlugin::new(),
+            bevy_inspector_egui::quick::WorldInspectorPlugin::new().run_if(
+                bevy::input::common_conditions::input_toggle_active(false, KeyCode::F3),
+            ),
         ));
     }
 }
