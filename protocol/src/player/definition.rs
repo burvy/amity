@@ -52,6 +52,9 @@ pub struct PlayerBody {
     locked: LockedAxes,
     ground_check: ShapeCaster,
     friction: Friction,
+    /// Set to 0 by `movement::player_motion` while the world around the player
+    /// hasn't loaded, so they hang in place instead of falling
+    gravity: GravityScale,
 }
 
 impl Default for PlayerBody {
@@ -68,6 +71,7 @@ impl Default for PlayerBody {
             )
             .with_max_distance(PLAYER_HALF_HEIGHT - PLAYER_RADIUS * 0.9 + GROUND_TOLERANCE),
             friction: Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
+            gravity: GravityScale(1.0),
         }
     }
 }
