@@ -9,6 +9,19 @@ use lightyear::prelude::input::native::ActionState;
 use shooter_protocol::world::{chunk, edit};
 use shooter_protocol::{aim, protocol, shared, stuff};
 
+/// Marks every player's physics state changed each tick, so lightyear replicates it
+/// even when it isn't moving. Clients only check their prediction when new server
+/// state arrives; without this, a player that diverged while standing still would
+/// never be corrected.
+pub fn keep_players_replicating(
+    mut players: Query<(&mut Position, &mut LinearVelocity), With<protocol::PlayerMarker>>,
+) {
+    for (mut position, mut velocity) in &mut players {
+        position.set_changed();
+        velocity.set_changed();
+    }
+}
+
 /// Simulates player movement on the server
 pub fn server_player_motion(
     mut players: Query<

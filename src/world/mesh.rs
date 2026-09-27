@@ -284,11 +284,12 @@ fn tile_named(name: &str) -> Option<u32> {
         .map(|&(_, tile)| tile)
 }
 
-/// Maps a 0..1 face UV into `tile`'s rectangle of the atlas, pulled in by half a
-/// pixel on every side so sampling at a face's edge never picks up the next tile
+/// Maps a 0..1 face UV into `tile`'s rectangle of the atlas. Pulled in by a sliver
+/// of a pixel so float rounding at a face's edge never samples the next tile; any
+/// more than that crops the edge pixels and visibly shifts the texture.
 fn tile_uv(tile: u32, [u, v]: [f32; 2]) -> [f32; 2] {
     let size = Vec2::new(1.0 / atlas::COLUMNS as f32, 1.0 / atlas::ROWS as f32);
-    let inset = size * 0.5 / atlas::TILE_PIXELS as f32;
+    let inset = size / (64 * atlas::TILE_PIXELS) as f32;
     let corner = Vec2::new((tile % atlas::COLUMNS) as f32, (tile / atlas::COLUMNS) as f32) * size;
     [
         corner.x + inset.x + u * (size.x - 2.0 * inset.x),

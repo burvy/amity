@@ -24,10 +24,10 @@ impl Plugin for WorldPlugin {
             )
                 .chain(),
         );
-        // rollback replays FixedUpdate ticks; predicting again would repeat the edit
+        // rollback replays FixedUpdate ticks; requesting again would repeat the edit
         app.add_systems(
             FixedUpdate,
-            edit::predict_edits.run_if(not(is_in_rollback)),
+            edit::request_edits.run_if(not(is_in_rollback)),
         );
         app.add_systems(Update, definition::draw_interactables); // replicated things
     }

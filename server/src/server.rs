@@ -57,6 +57,7 @@ impl Plugin for ServerPlugin {
                 logic::server_player_motion,
                 shared::step_up::<With<protocol::PlayerMarker>>,
                 logic::server_interact,
+                logic::keep_players_replicating,
             )
                 .chain(),
         );

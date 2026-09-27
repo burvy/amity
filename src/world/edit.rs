@@ -8,13 +8,15 @@ use shooter_protocol::{
     world::edit::{self, BlockChanged, Blocks, EditAction, EditBlock, EditChannel},
 };
 
-/// Applies our own player's edits immediately and sends them to the server to
-/// check. Reads this tick's inputs (empty while paused), and runs per tick, so
-/// holding a button edits at the tick rate whatever the FPS
-pub fn predict_edits(
+/// Asks the server to make our player's edits. Nothing changes locally until the
+/// server's `BlockChanged` arrives, so the client's world is only ever the server's.
+/// Reads this tick's inputs (empty while paused), and runs per tick, so holding a
+/// button edits at the tick rate whatever the FPS. Until the answer arrives the
+/// same edit is re-sent each tick; the server rejects the duplicates harmlessly.
+pub fn request_edits(
     spatial: SpatialQuery,
     player: Single<(Entity, &Position, &ActionState<PlayerInputs>), With<Controlled>>,
-    mut blocks: Blocks,
+    blocks: Blocks,
     mut sender: Single<&mut MessageSender<EditBlock>>,
 ) {
     let (player, position, action) = player.into_inner();
@@ -32,14 +34,11 @@ pub fn predict_edits(
     else {
         return;
     };
-    if blocks.set(pos, block) {
-        sender.send::<EditChannel>(EditBlock { pos, block });
-    }
+    sender.send::<EditChannel>(EditBlock { pos, block });
 }
 
-/// The server's block changes are the truth. The server answers every edit we
-/// send, with the new block if accepted or the real one if rejected, so this also
-/// corrects any wrong prediction.
+/// The server's block changes: the only way the client's world changes after a
+/// chunk arrives
 pub fn receive_block_changes(
     mut receiver: Single<&mut MessageReceiver<BlockChanged>>,
     mut blocks: Blocks,
