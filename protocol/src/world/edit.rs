@@ -4,14 +4,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     aim::{self, Aim},
-    protocol::PlayerInputs,
     world::chunk::{Block, Chunk, ChunkIndex, ChunkPos},
 };
 
 /// How far a player can break and place blocks
 pub const REACH: f32 = 5.0;
+/// Extra distance the server allows when checking an edit: the aimed point can be
+/// up to ~0.87 from the block's center, plus the player may have moved since
+pub const REACH_TOLERANCE: f32 = 0.5;
 /// What gets placed until there is an inventory
 pub const PLACED_BLOCK: Block = Block::Stone;
+
+/// Client -> server: "set this block", chosen by the client's own aim. Sent
+/// reliably, so unlike per-tick inputs it is never guessed, dropped or skipped
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EditBlock {
+    pub pos: IVec3,
+    pub block: Block,
+}
+
+/// Ordered + reliable, client -> server
+pub struct EditChannel;
 
 /// Server -> client: the authoritative new value of one block
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -79,41 +92,62 @@ impl EditTarget {
     }
 }
 
-/// The block change a player's held input asks for this tick, if any. Break wins
-/// when both are held. Shared so the client predicts exactly what the server does.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EditAction {
+    Break,
+    Place,
+}
+
+/// The block change an action aimed along `look` would make, if any
 pub fn player_edit(
-    input: &PlayerInputs,
+    action: EditAction,
     player: Entity,
     position: Vec3,
+    look: Vec2,
     spatial: &SpatialQuery,
     blocks: &Blocks,
 ) -> Option<(IVec3, Block)> {
-    if !input.break_block && !input.place_block {
-        return None;
-    }
-    let aim = aim::aim(spatial, player, position, input.look, REACH)?;
+    let aim = aim::aim(spatial, player, position, look, REACH)?;
     // anything else in the way (a player, a prop) blocks the edit
     if !blocks.is_chunk(aim.entity) {
         return None;
     }
     let target = EditTarget::from_aim(&aim);
-    if input.break_block {
-        return Some((target.hit, Block::Air));
+    match action {
+        EditAction::Break => Some((target.hit, Block::Air)),
+        EditAction::Place => {
+            can_place(target.adjacent, spatial, blocks).then_some((target.adjacent, PLACED_BLOCK))
+        }
     }
+}
 
-    // anything but a chunk (players, props) blocks placing into its space. Slightly
-    // shrunk so something merely touching the block's faces doesn't count
+/// A block can go at `pos` if it is air and nothing but chunks overlaps it
+/// (players, props). Slightly shrunk so something merely touching the block's
+/// faces doesn't count
+pub fn can_place(pos: IVec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
     let occupied = spatial
         .shape_intersections(
             &Collider::cuboid(0.99, 0.99, 0.99),
-            target.adjacent.as_vec3() + Vec3::splat(0.5),
+            pos.as_vec3() + Vec3::splat(0.5),
             Quat::IDENTITY,
             &SpatialQueryFilter::default(),
         )
         .into_iter()
         .any(|entity| !blocks.is_chunk(entity));
-    let free = blocks.get(target.adjacent) == Some(Block::Air) && !occupied;
-    free.then_some((target.adjacent, PLACED_BLOCK))
+    blocks.get(pos) == Some(Block::Air) && !occupied
+}
+
+/// The server's check of a client's `EditBlock`: within reach of where the server
+/// has the player, and a legal change of that block right now
+pub fn edit_allowed(edit: &EditBlock, eye: Vec3, spatial: &SpatialQuery, blocks: &Blocks) -> bool {
+    let center = edit.pos.as_vec3() + Vec3::splat(0.5);
+    if eye.distance(center) > REACH + REACH_TOLERANCE {
+        return false;
+    }
+    match edit.block {
+        Block::Air => blocks.get(edit.pos).is_some_and(Block::is_solid),
+        block => block == PLACED_BLOCK && can_place(edit.pos, spatial, blocks),
+    }
 }
 
 /// Keeps each chunk's collider matching its blocks, including new chunks. A chunk

@@ -4,7 +4,7 @@ use avian3d::spatial_query::{ShapeHits, SpatialQuery};
 use bevy::prelude::*;
 use lightyear::core::timeline::LocalTimeline;
 use lightyear::connection::{client::Connected, client_of::ClientOf};
-use lightyear::prelude::MessageSender;
+use lightyear::prelude::{ControlledBy, MessageReceiver, MessageSender};
 use lightyear::prelude::input::native::ActionState;
 use shooter_protocol::world::{chunk, edit};
 use shooter_protocol::{aim, protocol, shared, stuff};
@@ -68,26 +68,48 @@ pub fn server_interact(
     }
 }
 
-/// Applies players' held break/place input and tells every client what changed
-pub fn server_edit_blocks(
+/// Checks and applies clients' block edits. Accepted edits go to every client; a
+/// rejected edit gets the real block sent back, so that client's prediction is fixed
+/// on the next round trip instead of waiting for its timeout.
+/// Runs in Update: lightyear clears received messages every frame, and a frame
+/// with no fixed tick would drop them if this ran in FixedUpdate.
+pub fn receive_edits(
     spatial: SpatialQuery,
-    players: Query<
-        (Entity, &Position, &ActionState<protocol::PlayerInputs>),
-        With<protocol::PlayerMarker>,
+    players: Query<(&Position, &ControlledBy), With<protocol::PlayerMarker>>,
+    mut clients: Query<
+        (
+            Entity,
+            &mut MessageReceiver<edit::EditBlock>,
+            &mut MessageSender<edit::BlockChanged>,
+        ),
+        (With<ClientOf>, With<Connected>),
     >,
     mut blocks: edit::Blocks,
-    mut clients: Query<&mut MessageSender<edit::BlockChanged>, (With<ClientOf>, With<Connected>)>,
 ) {
-    for (player, position, action) in &players {
-        let Some((pos, block)) =
-            edit::player_edit(&action.0, player, position.0, &spatial, &blocks)
-        else {
-            continue;
-        };
-        if blocks.set(pos, block) {
-            for mut sender in &mut clients {
-                sender.send::<chunk::WorldChannel>(edit::BlockChanged { pos, block });
+    let mut accepted = Vec::new();
+    for (client, mut receiver, mut sender) in &mut clients {
+        let eye = players
+            .iter()
+            .find(|(_, controlled)| controlled.owner == client)
+            .map(|(position, _)| aim::eye(position.0));
+        for edit in receiver.receive() {
+            if eye.is_some_and(|eye| edit::edit_allowed(&edit, eye, &spatial, &blocks)) {
+                blocks.set(edit.pos, edit.block);
+                accepted.push(edit::BlockChanged {
+                    pos: edit.pos,
+                    block: edit.block,
+                });
+            } else if let Some(actual) = blocks.get(edit.pos) {
+                sender.send::<chunk::WorldChannel>(edit::BlockChanged {
+                    pos: edit.pos,
+                    block: actual,
+                });
             }
+        }
+    }
+    for (_, _, mut sender) in &mut clients {
+        for change in &accepted {
+            sender.send::<chunk::WorldChannel>(change.clone());
         }
     }
 }

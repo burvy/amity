@@ -53,14 +53,9 @@ impl Plugin for ServerPlugin {
         );
         app.add_systems(
             FixedUpdate,
-            (
-                logic::server_player_motion,
-                logic::server_interact,
-                logic::server_edit_blocks,
-            )
-                .chain(),
+            (logic::server_player_motion, logic::server_interact).chain(),
         );
-        app.add_systems(Update, (heartbeat, send_world));
+        app.add_systems(Update, (heartbeat, send_world, logic::receive_edits));
 
         // this is not default, but prevents clients from controlling
         // entities they shouldn't be on the server

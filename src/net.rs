@@ -15,7 +15,7 @@ use lightyear::{
     input::client::InputSystems,
     netcode::{client_plugin::NetcodeConfig, Key, NetcodeClient},
     prelude::{
-        client::ClientPlugins,
+        client::{ClientPlugins, InputTimelineConfig},
         input::native::{ActionState, InputMarker},
         *,
     },
@@ -93,6 +93,12 @@ fn connect(mut cmds: Commands) -> Result {
                 certificate_digest: String::new(),
             },
             PredictionManager::default(),
+            // run 3 ticks ahead of what the server needs instead of lightyear's 1, so
+            // a slow client frame doesn't deliver inputs after the server simulated them
+            InputTimelineConfig::default().with_sync_config(SyncConfig {
+                jitter_margin: 3.0,
+                ..default()
+            }),
         ))
         .id();
 
@@ -184,8 +190,8 @@ fn buffer_input(
         jump: keys.pressed(KeyCode::Space), // TODO: configurable inputs
         sprint: keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight), // TODO: configurable inputs
         interact: keys.pressed(KeyCode::KeyE), // TODO: configurable inputs
-        break_block: mouse.pressed(MouseButton::Left), // TODO: configurable inputs
-        place_block: mouse.pressed(MouseButton::Right), // TODO: configurable inputs
+        primary: mouse.pressed(MouseButton::Left), // TODO: configurable inputs
+        secondary: mouse.pressed(MouseButton::Right), // TODO: configurable inputs
     };
 }
 

@@ -15,6 +15,11 @@ pub struct Aim {
     pub distance: f32,
 }
 
+/// Where a player's eye is, given their body position
+pub fn eye(position: Vec3) -> Vec3 {
+    position + Vec3::Y * EYE_HEIGHT
+}
+
 /// Casts from the player's eye along their look direction. Anything with a
 /// collider blocks the ray; only the player themselves is ignored. Each action
 /// decides whether `Aim::entity` is a valid target for it, and passes its own reach.
@@ -26,7 +31,7 @@ pub fn aim(
     max_distance: f32,
 ) -> Option<Aim> {
     let dir = Dir3::new(Quat::from_euler(EulerRot::YXZ, look.x, look.y, 0.0) * Vec3::NEG_Z).ok()?;
-    let origin = position + Vec3::Y * EYE_HEIGHT;
+    let origin = eye(position);
     let hit = spatial.cast_ray(
         origin,
         dir,

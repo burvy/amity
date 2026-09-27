@@ -14,16 +14,16 @@ pub const SPRINT_MUL: f32 = 1.5;
 pub const AIR_ACCEL: f32 = 1.0;
 
 /// Shared jump velocity to ensure client-server similarity
-pub const JUMP_VEL: f32 = 4.0;
+pub const JUMP_VEL: f32 = 4.5;
 
 /// Shared player radius for simulation similarity
-pub const PLAYER_RADIUS: f32 = 0.45;
+pub const PLAYER_RADIUS: f32 = 0.3;
 /// Shared player length for simulation similarity
 /// This describes the cylinder section of the player,
 /// excluding the caps. The total height is:
 /// PLAYER_LENGTH + (2.0 * PLAYER_RADIUS) which is 1.8m
 /// Recalculate for the doc if anything changes with these two constants
-pub const PLAYER_LENGTH: f32 = 0.9;
+pub const PLAYER_LENGTH: f32 = 1.2;
 
 /// Eye height for the camera for client or possible server utilities
 pub const EYE_HEIGHT: f32 = 0.7;
@@ -45,6 +45,7 @@ pub struct PlayerBody {
     collider: Collider,
     locked: LockedAxes,
     ground_check: ShapeCaster,
+    friction: Friction,
 }
 
 impl Default for PlayerBody {
@@ -60,6 +61,7 @@ impl Default for PlayerBody {
                 Dir3::NEG_Y,
             )
             .with_max_distance(PLAYER_HALF_HEIGHT - PLAYER_RADIUS * 0.9 + GROUND_TOLERANCE),
+            friction: Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
         }
     }
 }

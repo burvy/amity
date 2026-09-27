@@ -30,6 +30,14 @@ impl Plugin for WorldProtocolPlugin {
         app.register_message::<edit::BlockChanged>()
             .add_direction(NetworkDirection::ServerToClient);
 
+        app.add_channel::<edit::EditChannel>(ChannelSettings {
+            mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+            ..default()
+        })
+        .add_direction(NetworkDirection::ClientToServer);
+        app.register_message::<edit::EditBlock>()
+            .add_direction(NetworkDirection::ClientToServer);
+
         app.init_resource::<chunk::ChunkIndex>();
         app.add_observer(chunk::index_chunk);
         app.add_observer(chunk::unindex_chunk);
