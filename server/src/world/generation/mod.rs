@@ -4,6 +4,7 @@
 //!
 //! - `settings.rs`: what the world looks like (tweak here)
 //! - `terrain.rs`: turns settings + a chunk position into blocks
+//! - `lakes.rs`: where water collects on land, a region at a time
 //! - `config.rs`: how far ahead and how many at once
 //! - `logic.rs`: the background task plumbing
 
@@ -12,6 +13,7 @@ use bevy::prelude::*;
 use crate::player::{config::SPAWN_XZ, definition::SpawnPoint};
 
 pub mod config;
+mod lakes;
 mod logic;
 pub mod settings;
 pub mod terrain;

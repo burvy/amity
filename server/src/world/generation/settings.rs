@@ -15,9 +15,11 @@ pub struct WorldGenSettings {
     pub seed: u32,
     /// Blocks of dirt between the grass and the stone (and of sand under water)
     pub dirt_depth: i32,
-    /// Height of the ocean's surface (metres). Every column whose ground is below
-    /// it is filled with water up to here. Lakes above sea level come later
+    /// Height of the ocean's surface (metres). Ocean, and basins connected to it,
+    /// fill with water up to here
     pub sea_level: f64,
+    /// Lakes: basins on land fill up to their lowest rim point. See `LakeSettings`
+    pub lakes: LakeSettings,
     /// Where land and ocean are, and the base height of each. See `Continents`
     pub continents: Continents,
     /// Noise layers added on top of the continents' base height. See `NoiseLayer`
@@ -30,6 +32,12 @@ impl Default for WorldGenSettings {
             seed: 0,
             dirt_depth: 3,
             sea_level: 0.0,
+            lakes: LakeSettings {
+                region: 2048.0,
+                margin: 1024.0,
+                cell: 8.0,
+                min_depth: 1.0,
+            },
             continents: Continents {
                 noise: Fractal {
                     scale: 3000.0,
@@ -74,6 +82,28 @@ impl Default for WorldGenSettings {
             ],
         }
     }
+}
+
+/// How lakes are found. `lakes.rs` explains the method: the world is split into
+/// square regions, and each is "flooded" on a coarse grid to find where water
+/// would collect.
+#[derive(Clone, Debug)]
+pub struct LakeSettings {
+    /// Metres along a region's edge. Mostly a performance knob: bigger regions are
+    /// computed less often but take longer each time
+    pub region: f64,
+    /// Metres of extra ground flooded around each region, so lakes near its edge
+    /// see their whole rim. Lakes wider than this, lying across a region border,
+    /// can get a different water level on each side. Raise it if you see a step
+    /// in a lake's surface; it costs more time per region
+    pub margin: f64,
+    /// Metres per grid cell. Smaller finds smaller lakes and follows the terrain
+    /// more closely, but costs a lot more (halving it is 4x the work and memory).
+    /// Noise layers narrower than 4 cells are left out of the grid: they'd only
+    /// make puddles
+    pub cell: f64,
+    /// Metres: lakes shallower than this at their deepest are dropped
+    pub min_depth: f64,
 }
 
 /// Continents and oceans. Their noise, "continentalness", is a very wide

@@ -17,7 +17,10 @@ pub fn receive_chunks(
         if let Some(old) = index.get(pos) {
             cmds.entity(old).despawn();
         }
-        cmds.spawn(chunk_body(pos, chunk));
+        // Visibility: a chunk's water is drawn by a child entity, and bevy only
+        // shows children of entities that have one. Chunks with no solid mesh
+        // (open sea) wouldn't get one otherwise, and their water would be invisible
+        cmds.spawn((chunk_body(pos, chunk), Visibility::default()));
     }
 }
 
