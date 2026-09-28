@@ -40,3 +40,8 @@ tokio = { version = "1.53.1", features = ["rt"] }
 noise = "0.9"
 # serde is not required as serialization happens in amity-protocol
 amity-protocol = { path = "../protocol"} # protocol shared with client
+
+[build-dependencies]
+# build.rs checks and packs the structure files, assets/structures
+ron = "0.12"
+serde = { version = "1.0.229", features = ["derive"] }

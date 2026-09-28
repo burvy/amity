@@ -7,6 +7,7 @@
 //! - `erosion.rs`: carves gullies and ridges into the hills (MPL-2.0, see file)
 //! - `lakes.rs`: where water collects on land, a region at a time
 //! - `surface.rs`: surface rules, what the top of the ground is made of
+//! - `structures.rs`: trees and other structures scattered over the land
 //! - `config.rs`: how far ahead and how many at once
 //! - `logic.rs`: the background task plumbing
 
@@ -18,6 +19,7 @@ pub mod config;
 mod erosion;
 mod lakes;
 mod logic;
+mod structures;
 mod surface;
 pub mod settings;
 pub mod terrain;

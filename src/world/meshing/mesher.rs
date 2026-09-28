@@ -13,10 +13,7 @@
 //!    once per block: the block shader (`block.wgsl`) tiles it across the
 //!    rectangle.
 
-use amity_protocol::world::{
-    block::Block,
-    config::{BLOCK_SIZE, CHUNK_SIZE},
-};
+use amity_protocol::world::config::{BLOCK_SIZE, CHUNK_SIZE};
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
@@ -55,20 +52,32 @@ const CORNERS: [IVec2; 4] = [
     IVec2::new(0, 1),
 ];
 
-/// A chunk's two meshes. They're drawn with different materials: fluids are
-/// see-through, and see-through surfaces must be drawn after (and sorted apart
-/// from) everything solid
+/// A chunk's three meshes, each drawn with its own material: fluids are
+/// blended with what's behind them, which must be drawn after (and sorted
+/// apart from) everything solid; see-through blocks like leaves cut holes
+/// where their texture is transparent, which is cheap but still costs more
+/// than solid blocks, so they're kept apart from those
 pub struct ChunkMeshes {
     /// every solid block's visible faces
     pub solid: Mesh,
+    /// every see-through block's visible faces
+    pub cutout: Mesh,
     /// every fluid block's surfaces: only where the fluid meets air
     pub fluid: Mesh,
+}
+
+/// Which of the chunk's meshes a face goes in
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Surface {
+    Solid,
+    Cutout,
+    Fluid,
 }
 
 /// What a visible face looks like. Faces that match can be merged
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct Look {
-    fluid: bool,
+    surface: Surface,
     tile: u32,
     /// ambient occlusion per corner, in `CORNERS` order: 0 darkest, 3 open
     ao: [u8; 4],
@@ -93,11 +102,13 @@ impl Look {
 /// Visible, merged faces for both meshes.
 ///
 /// Which faces are visible:
-/// - a solid block's face shows unless the block next to it is solid. So stone
-///   under water still draws its faces, which you see through the water
-/// - a fluid block's face shows only where it touches air. Water next to water
-///   draws nothing, so a lake is one surface, not a grid of cubes, and water
-///   against stone is hidden by the stone
+/// - a solid block's face shows unless the block next to it is opaque. So stone
+///   under water or behind leaves still draws its faces, which you see through
+///   the water or the leaves' gaps. Leaves next to leaves draw their faces too,
+///   so a canopy looks full, not hollow
+/// - a fluid block's face shows only where it touches air (or leaves). Water
+///   next to water draws nothing, so a lake is one surface, not a grid of
+///   cubes, and water against stone is hidden by the stone
 ///
 /// For each face direction, the chunk is cut into slices one block thick. Each
 /// slice's visible faces go in a 2D grid, which is then covered with as few
@@ -106,6 +117,7 @@ impl Look {
 pub fn chunk_mesh(chunk: &PaddedChunk) -> ChunkMeshes {
     const N: i32 = CHUNK_SIZE;
     let mut solid = MeshBuilder::default();
+    let mut cutout = MeshBuilder::default();
     let mut fluid = MeshBuilder::default();
     let mut grid: Vec<Option<Look>> = vec![None; (N * N) as usize];
     let cell = |a: i32, b: i32| (a + b * N) as usize;
@@ -149,7 +161,11 @@ pub fn chunk_mesh(chunk: &PaddedChunk) -> ChunkMeshes {
                     }
 
                     let block_pos = across * slice + face.u * a + face.v * b;
-                    let builder = if look.fluid { &mut fluid } else { &mut solid };
+                    let builder = match look.surface {
+                        Surface::Solid => &mut solid,
+                        Surface::Cutout => &mut cutout,
+                        Surface::Fluid => &mut fluid,
+                    };
                     builder.rectangle(face, block_pos, IVec2::new(width, height), look);
                 }
             }
@@ -158,6 +174,7 @@ pub fn chunk_mesh(chunk: &PaddedChunk) -> ChunkMeshes {
 
     ChunkMeshes {
         solid: solid.build(),
+        cutout: cutout.build(),
         fluid: fluid.build(),
     }
 }
@@ -167,42 +184,49 @@ fn look(chunk: &PaddedChunk, face: &Face, pos: IVec3) -> Option<Look> {
     let block = chunk.get(pos);
     let front = pos + face.normal;
     let neighbour = chunk.get(front);
-    let fluid = if block.is_solid() && !neighbour.is_solid() {
-        false
-    } else if block.is_fluid() && neighbour == Block::AIR {
-        true
+    let surface = if block.is_solid() && !neighbour.is_opaque() {
+        if block.is_see_through() {
+            Surface::Cutout
+        } else {
+            Surface::Solid
+        }
+    } else if block.is_fluid() && !neighbour.is_fluid() && !neighbour.is_opaque() {
+        Surface::Fluid
     } else {
         return None;
     };
+    // what shades a corner: anything solid, leaves included
     let solid = |p: IVec3| chunk.get(p).is_solid();
+    // what stops sky light: only blocks with no gaps
+    let opaque = |p: IVec3| chunk.get(p).is_opaque();
     // towards each corner, along u and along v
     let towards = CORNERS.map(|corner| (face.u * (corner.x * 2 - 1), face.v * (corner.y * 2 - 1)));
     // a fluid's surface isn't shaded: it would show as dark patches on water
-    let ao = if fluid {
+    let ao = if surface == Surface::Fluid {
         [3; 4]
     } else {
         towards.map(|(du, dv)| vertex_ao(solid(front + du), solid(front + dv), solid(front + du + dv)))
     };
     let light = towards.map(|(du, dv)| {
         // the blocks in front of the face around this corner, leaving out
-        // solid ones (they're dark inside), and the diagonal if both sides are
-        // solid (it's walled off from the corner)
-        let (side_1, side_2) = (solid(front + du), solid(front + dv));
+        // opaque ones (they're dark inside), and the diagonal if both sides are
+        // opaque (it's walled off from the corner)
+        let (side_1, side_2) = (opaque(front + du), opaque(front + dv));
         let around = [
             Some(front),
             (!side_1).then_some(front + du),
             (!side_2).then_some(front + dv),
-            (!(side_1 && side_2) && !solid(front + du + dv)).then_some(front + du + dv),
+            (!(side_1 && side_2) && !opaque(front + du + dv)).then_some(front + du + dv),
         ];
         let (sum, count) = around
             .into_iter()
             .flatten()
             .fold((0u32, 0u32), |(sum, count), p| (sum + chunk.light(p) as u32, count + 1));
-        // the average, times 4 and rounded (`front` is never solid: count >= 1)
+        // the average, times 4 and rounded (`front` is never opaque: count >= 1)
         ((sum * 4 + count / 2) / count) as u8
     });
     Some(Look {
-        fluid,
+        surface,
         tile: face_tile(block, face.normal),
         ao,
         light,
@@ -299,7 +323,7 @@ fn texture_uv(normal: IVec3, p: Vec3) -> [f32; 2] {
 
 #[cfg(test)]
 mod tests {
-    use amity_protocol::world::chunk::Chunk;
+    use amity_protocol::world::{block::Block, chunk::Chunk};
 
     use super::*;
     use crate::world::meshing::padded::Neighbourhood;
@@ -356,6 +380,34 @@ mod tests {
         chunk.set(IVec3::X, Block::SAND);
         // the 4 long sides each split in two, plus the 2 ends
         assert_eq!(rectangles(&chunk), (10, 0));
+    }
+
+    /// see-through rectangles in a chunk alone
+    fn cutout_rectangles(chunk: &Chunk) -> usize {
+        chunk_mesh(&padded(chunk, |_| None)).cutout.count_vertices() / 4
+    }
+
+    #[test]
+    fn leaves_show_what_is_behind_them() {
+        // stone with leaves on top: the stone's top face still draws (it shows
+        // through the gaps), and the leaves go in their own mesh, all but
+        // their bottom, which the stone hides
+        let mut chunk = Chunk::default();
+        chunk.set(IVec3::ZERO, Block::STONE);
+        chunk.set(IVec3::Y, Block::OAK_LEAVES);
+        assert_eq!(rectangles(&chunk).0, 6);
+        assert_eq!(cutout_rectangles(&chunk), 5);
+    }
+
+    #[test]
+    fn leaves_next_to_leaves_draw_between_them() {
+        // two leaf blocks: the faces between them draw too (one each way), so
+        // a canopy isn't hollow when seen through its gaps. Plus the outside:
+        // 4 long sides (merged) and 2 ends
+        let mut chunk = Chunk::default();
+        chunk.set(IVec3::ZERO, Block::OAK_LEAVES);
+        chunk.set(IVec3::X, Block::OAK_LEAVES);
+        assert_eq!(cutout_rectangles(&chunk), 8);
     }
 
     #[test]

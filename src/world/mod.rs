@@ -4,6 +4,8 @@
 use bevy::prelude::*;
 use lightyear::core::timeline::is_in_rollback;
 
+#[cfg(feature = "dev-local")]
+mod capture;
 pub(crate) mod chunks;
 mod edit;
 pub(crate) mod meshing;
@@ -39,5 +41,11 @@ impl Plugin for WorldPlugin {
             FixedUpdate,
             edit::request_edits.run_if(not(is_in_rollback)),
         );
+        // dev builds: F6, F7, F8 capture structures
+        #[cfg(feature = "dev-local")]
+        {
+            app.init_resource::<capture::Capture>();
+            app.add_systems(Update, capture::capture);
+        }
     }
 }

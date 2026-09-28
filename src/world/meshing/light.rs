@@ -2,7 +2,7 @@
 //!
 //! Every block with open sky above it (see protocol `chunk/sky.rs`) gets the
 //! full level, `SKY_LIGHT_MAX`. From there light spreads into every block that
-//! isn't solid (air and water), losing one level per block, the way Minecraft
+//! isn't opaque (air, water, leaves), losing one level per block, the way Minecraft
 //! floods it: so it reaches `SKY_LIGHT_MAX` blocks under an overhang, into a
 //! cave mouth or down into a lake, and deeper is pitch black.
 //!
@@ -39,11 +39,11 @@ const DIRECTIONS: [IVec3; 6] = [
 pub fn sky_light(area: &Neighbourhood) -> Box<[u8]> {
     let mut light = vec![0; PADDED_VOLUME];
 
-    // Shortcut: every block that isn't solid is out under the sky (the usual
+    // Shortcut: every block that isn't opaque is out under the sky (the usual
     // case above ground). Then there's nowhere for light to spread to
     let mut shaded = false;
     for_each_cell(-1, CHUNK_SIZE + 2, |p| {
-        if area.block(p).is_solid() {
+        if area.block(p).is_opaque() {
             return;
         }
         if area.open(p) {
@@ -67,11 +67,11 @@ pub fn sky_light(area: &Neighbourhood) -> Box<[u8]> {
     let inside = |p: IVec3| p.cmpge(IVec3::splat(low)).all() && p.cmplt(IVec3::splat(low + size)).all();
 
     let volume = (size * size * size) as usize;
-    let mut solid = vec![false; volume];
+    let mut opaque = vec![false; volume];
     let mut level = vec![0u8; volume];
     for_each_cell(low, size, |p| {
-        if area.block(p).is_solid() {
-            solid[index(p)] = true;
+        if area.block(p).is_opaque() {
+            opaque[index(p)] = true;
         } else if area.open(p) {
             level[index(p)] = SKY_LIGHT_MAX;
         }
@@ -86,7 +86,7 @@ pub fn sky_light(area: &Neighbourhood) -> Box<[u8]> {
         }
         let shaded_beside = DIRECTIONS.iter().any(|&d| {
             let n = p + d;
-            inside(n) && !solid[index(n)] && level[index(n)] < SKY_LIGHT_MAX
+            inside(n) && !opaque[index(n)] && level[index(n)] < SKY_LIGHT_MAX
         });
         if shaded_beside {
             queue.push_back(p);
@@ -99,7 +99,7 @@ pub fn sky_light(area: &Neighbourhood) -> Box<[u8]> {
         }
         for d in DIRECTIONS {
             let n = p + d;
-            if inside(n) && !solid[index(n)] && level[index(n)] < next {
+            if inside(n) && !opaque[index(n)] && level[index(n)] < next {
                 level[index(n)] = next;
                 queue.push_back(n);
             }

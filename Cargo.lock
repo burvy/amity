@@ -268,6 +268,8 @@ dependencies = [
  "bevy",
  "lightyear",
  "noise",
+ "ron",
+ "serde",
  "tokio",
 ]
 

@@ -220,6 +220,7 @@ impl Default for WorldGenSettings {
                     rainfall: ANY,
                     rules: vec![],
                     ground: vec![(Block::SNOW, 1), (Block::GRAVEL, 2)],
+                    features: vec![],
                 },
                 Biome {
                     name: "taiga",
@@ -227,6 +228,7 @@ impl Default for WorldGenSettings {
                     rainfall: ANY,
                     rules: vec![],
                     ground: vec![(Block::PODZOL, 1), (Block::DIRT, 3)],
+                    features: vec![trees(0.6, &[Block::PODZOL])],
                 },
                 Biome {
                     name: "grassland",
@@ -234,6 +236,7 @@ impl Default for WorldGenSettings {
                     rainfall: (f64::MIN, 100.0),
                     rules: vec![],
                     ground: vec![(Block::DRY_GRASS, 1), (Block::DIRT, 3)],
+                    features: vec![trees(0.05, &[Block::DRY_GRASS, Block::GRASS])],
                 },
                 Biome {
                     name: "temperate forest",
@@ -241,6 +244,7 @@ impl Default for WorldGenSettings {
                     rainfall: ANY,
                     rules: vec![],
                     ground: vec![(Block::GRASS, 1), (Block::DIRT, 3)],
+                    features: vec![trees(1.2, &[Block::GRASS])],
                 },
                 Biome {
                     name: "desert",
@@ -257,6 +261,7 @@ impl Default for WorldGenSettings {
                         },
                     ],
                     ground: vec![(Block::SAND, 4), (Block::SANDSTONE, 6)],
+                    features: vec![],
                 },
                 Biome {
                     name: "savanna",
@@ -264,6 +269,7 @@ impl Default for WorldGenSettings {
                     rainfall: (60.0, 180.0),
                     rules: vec![],
                     ground: vec![(Block::DRY_GRASS, 1), (Block::DIRT, 3)],
+                    features: vec![trees(0.08, &[Block::DRY_GRASS])],
                 },
                 Biome {
                     name: "tropical forest",
@@ -271,6 +277,7 @@ impl Default for WorldGenSettings {
                     rainfall: ANY,
                     rules: vec![],
                     ground: vec![(Block::GRASS, 1), (Block::DIRT, 3)],
+                    features: vec![trees(1.5, &[Block::GRASS])],
                 },
             ],
         }
@@ -279,6 +286,21 @@ impl Default for WorldGenSettings {
 
 /// Any value: a range for `Biome` conditions that always holds
 pub const ANY: (f64, f64) = (f64::MIN, f64::MAX);
+
+/// Trees: `per_100m2` of them on dry ground less steep than 30 degrees, whose
+/// top block is one of `on`. Oaks everywhere for now
+fn trees(per_100m2: f64, on: &[Block]) -> Feature {
+    Feature {
+        structures: vec![("oak_1", 1), ("oak_2", 1)],
+        per_100m2,
+        when: When {
+            slope: (0.0, 30.0),
+            under_water: Some(false),
+            ..When::default()
+        },
+        on: on.to_vec(),
+    }
+}
 
 /// Temperature and rainfall for every column. Each is a wide noise mapped onto a
 /// range; `terrain.rs` explains how biomes use them
@@ -332,6 +354,23 @@ pub struct Biome {
     pub rules: Vec<SurfaceRule>,
     /// The layers for any column no rule matches: this biome's normal ground
     pub ground: Vec<(Block, i32)>,
+    /// What grows or stands on it: trees, and later rocks and ruins. Tried in
+    /// order; one structure at most per spot
+    pub features: Vec<Feature>,
+}
+
+/// Structures scattered over a biome (see `structures.rs`)
+#[derive(Clone, Debug)]
+pub struct Feature {
+    /// Which structures, by file name in `assets/structures`, with weights:
+    /// ("oak_1", 3) and ("oak_2", 1) makes three of the first to one of the second
+    pub structures: Vec<(&'static str, u32)>,
+    /// How many, on average, per 100 square metres where they can grow
+    pub per_100m2: f64,
+    /// Where they can go (`altitude` and `slope` of the spot, dry or wet...)
+    pub when: When,
+    /// The ground they need under them: the top block. Empty: any
+    pub on: Vec<Block>,
 }
 
 /// The erosion filter (`erosion.rs` explains it). The defaults are the

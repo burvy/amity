@@ -8,6 +8,9 @@
 //   solid:    false for blocks you can walk through. Default true (false for fluids)
 //   fluid:    true for water and the like: walked through, drawn see-through
 //             (the png's alpha is used), and blocks can be placed into it
+//   see_through: true for solid blocks with gaps, like leaves: pixels with
+//             alpha 0 are holes you see (and light shines) through, and the
+//             faces of blocks behind them are still drawn
 //   textures: (top: "...", side: "...", bottom: "...") picks a png per face,
 //             by file name without .png. Faces left out use the block's name.
 //             e.g. (name: "grass", textures: (top: "grass_top", bottom: "dirt"))
@@ -15,6 +18,9 @@
 // A block's id is its position in this list, so reordering changes ids. That's
 // fine: the client and server are always built from the same file, and saves
 // will store names.
+
+// lets optional fields be written plainly, e.g. `top: "grass_top"`
+#![enable(implicit_some)]
 [
     (name: "stone"),
     (name: "dirt"),
@@ -26,4 +32,6 @@
     (name: "dry_grass"),
     (name: "podzol"),
     (name: "sandstone"),
+    (name: "oak_log", textures: (top: "oak_log_top", side: "oak_log_side", bottom: "oak_log_top")),
+    (name: "oak_leaves", see_through: true),
 ]

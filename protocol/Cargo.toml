@@ -29,6 +29,8 @@ lightyear = { version = "0.28.0", default-features = false, features = [
     "avian3d",
 ]}
 serde = { version = "1.0.229", features = ["derive"]}
+# structure files (world/structure.rs)
+ron = "0.12"
 
 [build-dependencies]
 # build.rs reads the block list, assets/blocks.ron

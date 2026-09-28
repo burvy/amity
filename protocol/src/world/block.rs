@@ -20,6 +20,7 @@ struct BlockDef {
     name: &'static str,
     solid: bool,
     fluid: bool,
+    see_through: bool,
     /// texture file names (no .png) per face
     top: &'static str,
     side: &'static str,
@@ -49,6 +50,11 @@ impl Block {
         self.def().name
     }
 
+    /// The block with this name in blocks.ron (or "air"), if there is one
+    pub fn named(name: &str) -> Option<Block> {
+        Block::all().find(|block| block.name() == name)
+    }
+
     /// Whether players collide with it, and whether it hides its neighbours' faces
     pub fn is_solid(self) -> bool {
         self.def().solid
@@ -58,6 +64,18 @@ impl Block {
     /// placed into it
     pub fn is_fluid(self) -> bool {
         self.def().fluid
+    }
+
+    /// Solid, but with gaps, like leaves: you see through its transparent
+    /// pixels, and sky light passes through it
+    pub fn is_see_through(self) -> bool {
+        self.def().see_through
+    }
+
+    /// Solid all the way through: hides the faces of blocks behind it, and
+    /// stops sky light. Solid blocks that aren't see-through
+    pub fn is_opaque(self) -> bool {
+        self.is_solid() && !self.is_see_through()
     }
 
     /// The texture file name (no .png) on the face pointing along `normal`

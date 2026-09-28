@@ -23,6 +23,8 @@
 //!    grass over dirt, sand under water and in deserts, gravel on steep slopes...
 //! 7. **Blocks.** Going down a column: air, then water down to the ground (if
 //!    any), then the rule's layers, then stone forever.
+//! 8. **Structures.** Trees and the like, from the biomes' features, planted on
+//!    top (see `structures.rs`).
 //!
 //! Noise is deterministic: the same seed and position always give the same value,
 //! so chunks can be generated in any order, on any thread, and still line up at
@@ -55,9 +57,11 @@ use bevy::{math::DVec2, prelude::*};
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
 
 use super::{
+    config::STRUCTURE_CELL,
     erosion::{self, octave_bound, octave_spacing},
     lakes::{CellSample, Lakes, SampleGrid},
     settings::{Biome, ErosionSettings, Fractal, SurfaceRule, When, WorldGenSettings},
+    structures::{SpotColumn, Structures},
     surface::{self, Facts},
 };
 
@@ -107,6 +111,10 @@ struct TerrainInner {
     /// how many erosion octaves the lake grid computes: those whose gullies are
     /// at least 4 lake cells apart. The rest are bounded, like narrow layers
     coarse_octaves: usize,
+    /// the world's seed, for picking where structures go
+    seed: u32,
+    /// every structure, and what each biome grows
+    structures: Structures,
 }
 
 /// A `NoiseLayer` with its noise built and ready to sample
@@ -135,6 +143,8 @@ pub struct Column {
     /// Which surface rule the column follows, as its index in its biome's
     /// complete rule list (see `BiomeRules`)
     pub surface: usize,
+    /// What the surface rule was picked by (structures are placed by it too)
+    pub facts: Facts,
 }
 
 /// A biome as generation uses it: its climate ranges, and every surface rule a
@@ -323,6 +333,14 @@ impl Terrain {
                     octave_spacing(&settings.erosion, octave) >= 4.0 * settings.lakes.cell
                 })
                 .count(),
+            seed: settings.seed,
+            structures: Structures::new(
+                &settings
+                    .biomes
+                    .iter()
+                    .map(|biome| &biome.features[..])
+                    .collect::<Vec<_>>(),
+            ),
         }))
     }
 
@@ -587,6 +605,7 @@ impl Terrain {
             water: raw.water,
             biome,
             surface: surface::pick(&self.0.biomes[biome].rules, &facts),
+            facts,
         }
     }
 
@@ -774,10 +793,86 @@ impl Terrain {
     /// up with only air above (the top of the ground, or of water on it; see
     /// `world/sky.rs`), x + z * 32. Runs on a background thread for every chunk
     /// the server needs, so it should stay fast
+    ///
+    /// The heights leave out structures: a tree's leaves let the sky's light
+    /// through, and under its trunk is only more trunk
     pub fn generate_with_sky(&self, pos: ChunkPos) -> (Chunk, Vec<i32>) {
         let columns = self.columns(pos);
         let heights = columns.iter().map(|column| column.water).collect();
-        (self.blocks(pos, &columns), heights)
+        let mut chunk = self.blocks(pos, &columns);
+        self.place_structures(pos, &columns, &mut chunk);
+        (chunk, heights)
+    }
+
+    /// The block on top of `column`'s ground: its surface rule's first layer
+    fn top_block(&self, column: &Column) -> Block {
+        self.0.biomes[column.biome]
+            .rules
+            .get(column.surface)
+            .and_then(|rule| rule.layers.first())
+            .map_or(Block::STONE, |&(block, _)| block)
+    }
+
+    /// Step 3 of `generate`: the parts of any structures reaching into the
+    /// chunk at `pos` (see `structures.rs`). `columns` are the chunk's own
+    fn place_structures(&self, pos: ChunkPos, columns: &[Column], chunk: &mut Chunk) {
+        let structures = &self.0.structures;
+        let (reach, height) = (structures.reach(), structures.height());
+        let origin = pos.0 * CHUNK_SIZE;
+
+        // too far above or below the ground here for any structure to reach.
+        // Spots nearby can be higher or lower than any column here, but only
+        // gently (structures want gentle slopes): allow `reach` more
+        let lowest = columns.iter().map(|column| column.height).min().unwrap();
+        let highest = columns.iter().map(|column| column.height).max().unwrap();
+        if origin.y > highest + reach + height || origin.y + CHUNK_SIZE <= lowest - reach {
+            return;
+        }
+
+        // every cell with a spot close enough to reach into the chunk, visited
+        // in the same order by every chunk
+        let first = (origin.xz() - IVec2::splat(reach)).div_euclid(IVec2::splat(STRUCTURE_CELL));
+        let last = (origin.xz() + IVec2::splat(CHUNK_SIZE - 1 + reach))
+            .div_euclid(IVec2::splat(STRUCTURE_CELL));
+        for cell_z in first.y..=last.y {
+            for cell_x in first.x..=last.x {
+                let cell = IVec2::new(cell_x, cell_z);
+                let Some((spot, roll)) = structures.candidate(self.0.seed, cell) else {
+                    continue;
+                };
+                // the spot's distance outside the chunk (0 inside it)
+                let local = spot - origin.xz();
+                let outside = (-local).max(local - IVec2::splat(CHUNK_SIZE - 1)).max(IVec2::ZERO);
+                if outside.max_element() > reach {
+                    continue;
+                }
+                // the spot's column: the chunk's own, or worked out afresh
+                let column = if outside == IVec2::ZERO {
+                    columns[(local.x + local.y * CHUNK_SIZE) as usize]
+                } else {
+                    self.column_at(spot.x, spot.y)
+                };
+                let spot_column = SpotColumn {
+                    biome: column.biome,
+                    facts: column.facts,
+                    top: self.top_block(&column),
+                    ground: column.height,
+                };
+                let Some(planted) = structures.plant(self.0.seed, cell, spot, roll, spot_column)
+                else {
+                    continue;
+                };
+                for (offset, block) in planted.structure.placed(planted.orientation) {
+                    let local = planted.anchor + offset - origin;
+                    let inside = local.cmpge(IVec3::ZERO).all() && local.cmplt(IVec3::splat(CHUNK_SIZE)).all();
+                    // only into air and water: never the ground, or an earlier
+                    // structure
+                    if inside && !chunk.get(local).is_solid() {
+                        chunk.set(local, block);
+                    }
+                }
+            }
+        }
     }
 
     /// Every block of the chunk at `pos`, from its columns
@@ -886,6 +981,38 @@ mod tests {
     }
 
     #[test]
+    fn trees_grow_and_stand_on_the_ground() {
+        let terrain = Terrain::new(&WorldGenSettings::default());
+        let mut logs = 0;
+        // chunk columns spread over the map, from under the ground to the sky
+        for cz in (-40..40).step_by(8) {
+            for cx in (-40..40).step_by(8) {
+                for cy in -4..=4 {
+                    let pos = ChunkPos(IVec3::new(cx, cy, cz));
+                    let chunk = terrain.generate(pos);
+                    for y in 0..CHUNK_SIZE {
+                        for z in 0..CHUNK_SIZE {
+                            for x in 0..CHUNK_SIZE {
+                                let local = IVec3::new(x, y, z);
+                                if chunk.get(local) != Block::OAK_LOG {
+                                    continue;
+                                }
+                                logs += 1;
+                                // a trunk rises from its column's ground, never
+                                // under it
+                                let world = pos.0 * CHUNK_SIZE + local;
+                                let column = terrain.column_at(world.x, world.z);
+                                assert!(world.y >= column.height, "a log under the ground at {world}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(logs > 0, "no trees anywhere");
+    }
+
+    #[test]
     fn same_seed_same_world() {
         let settings = WorldGenSettings::default();
         let (a, b) = (Terrain::new(&settings), Terrain::new(&settings));
@@ -904,11 +1031,12 @@ mod tests {
 
     #[test]
     fn shortcuts_match_block_by_block() {
-        // `generate` (with its whole-chunk shortcuts) against filling every block
+        // `blocks` (with its whole-chunk shortcuts) against filling every block
         let terrain = Terrain::new(&WorldGenSettings::default());
         for pos in sample_chunks() {
-            let chunk = terrain.generate(pos);
-            let filled = terrain.fill(pos.0.y * CHUNK_SIZE, &terrain.columns(pos));
+            let columns = terrain.columns(pos);
+            let chunk = terrain.blocks(pos, &columns);
+            let filled = terrain.fill(pos.0.y * CHUNK_SIZE, &columns);
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
                     for y in 0..CHUNK_SIZE {
@@ -917,6 +1045,16 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// Facts for a hand-made column, where they don't matter
+    fn any_facts() -> Facts {
+        Facts {
+            altitude: 0.0,
+            slope: 0.0,
+            under_water: false,
+            above_water: None,
         }
     }
 
@@ -932,6 +1070,7 @@ mod tests {
             water: 10,
             biome: forest,
             surface: terrain.0.biomes[forest].rules.len() - 1,
+            facts: any_facts(),
         };
         assert_eq!(terrain.block(land, 10), Block::AIR);
         assert_eq!(terrain.block(land, 9), Block::GRASS);
@@ -984,6 +1123,7 @@ mod tests {
             water: 0,
             biome: biome_named(&settings, "temperate forest"),
             surface: 0,
+            facts: any_facts(),
         };
         assert_eq!(terrain.block(deep, 0), Block::AIR);
         assert_eq!(terrain.block(deep, -1), Block::WATER);

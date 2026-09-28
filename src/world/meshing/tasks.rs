@@ -32,11 +32,16 @@ pub struct NeedsMesh;
 #[derive(Component)]
 pub struct MeshTask(Task<ChunkMeshes>);
 
-/// The child entity drawing a chunk's fluids. An entity has one mesh and one
-/// material, so the chunk draws its solid blocks and this child its water.
-/// Despawned with the chunk
-#[derive(Component)]
-pub struct FluidMesh(Entity);
+/// The child entities drawing a chunk's see-through blocks and fluids. An
+/// entity has one mesh and one material, so the chunk draws its solid blocks
+/// and these children the rest. Each is spawned the first time the chunk has
+/// something for it to draw and despawned when it no longer does, so most
+/// chunks have neither. Despawned with the chunk
+#[derive(Component, Default, PartialEq)]
+pub struct ChunkParts {
+    cutout: Option<Entity>,
+    fluid: Option<Entity>,
+}
 
 /// A chunk is meshed once it and all 26 chunks around it are loaded: its
 /// border faces, and the shading at its edges (ambient occlusion looks
@@ -98,18 +103,18 @@ pub fn mark_dirty(
 /// nothing to draw and skip it.
 pub fn start_mesh_tasks(
     mut cmds: Commands,
-    dirty: Query<(Entity, &ChunkPos, &Chunk, Option<&FluidMesh>), With<NeedsMesh>>,
+    dirty: Query<(Entity, &ChunkPos, &Chunk, Option<&ChunkParts>), With<NeedsMesh>>,
     chunks: Query<(&Chunk, Option<&ChunkSky>)>,
     index: Res<ChunkIndex>,
 ) {
     let pool = AsyncComputeTaskPool::get();
-    for (entity, pos, chunk, fluid) in &dirty {
+    for (entity, pos, chunk, parts) in &dirty {
         if *chunk == Chunk::Uniform(Block::AIR) {
-            if let Some(FluidMesh(child)) = fluid {
-                cmds.entity(*child).despawn();
+            for child in parts.into_iter().flat_map(|parts| [parts.cutout, parts.fluid]).flatten() {
+                cmds.entity(child).despawn();
             }
             cmds.entity(entity)
-                .remove::<(NeedsMesh, MeshTask, Mesh3d, FluidMesh)>();
+                .remove::<(NeedsMesh, MeshTask, Mesh3d, ChunkParts)>();
             continue;
         }
         let mut entity = cmds.entity(entity);
@@ -125,17 +130,16 @@ pub fn start_mesh_tasks(
     }
 }
 
-/// Swaps in finished meshes: the solid one on the chunk itself, the fluid one on
-/// its `FluidMesh` child, which is spawned the first time a chunk has water and
-/// despawned when it no longer does
+/// Swaps in finished meshes: the solid one on the chunk itself, the
+/// see-through and fluid ones on its `ChunkParts` children
 pub fn finish_mesh_tasks(
     mut cmds: Commands,
-    mut tasks: Query<(Entity, &mut MeshTask, Option<&FluidMesh>)>,
+    mut tasks: Query<(Entity, &mut MeshTask, Option<&mut ChunkParts>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     materials: Res<ChunkMaterials>,
 ) {
-    for (chunk, mut task, fluid_child) in &mut tasks {
-        let Some(ChunkMeshes { solid, fluid }) = check_ready(&mut task.0) else {
+    for (chunk, mut task, parts) in &mut tasks {
+        let Some(ChunkMeshes { solid, cutout, fluid }) = check_ready(&mut task.0) else {
             continue;
         };
         let mut entity = cmds.entity(chunk);
@@ -149,32 +153,56 @@ pub fn finish_mesh_tasks(
             ));
         }
 
-        match (fluid.count_vertices() == 0, fluid_child) {
-            // no water, no child: nothing to do
-            (true, None) => {}
-            // the water is gone
-            (true, Some(FluidMesh(child))) => {
-                cmds.entity(*child).despawn();
-                cmds.entity(chunk).remove::<FluidMesh>();
+        let (cutout_child, fluid_child) = parts
+            .as_deref()
+            .map_or((None, None), |parts| (parts.cutout, parts.fluid));
+        let now = ChunkParts {
+            // leaves cast (dappled) shadows
+            cutout: swap_part(&mut cmds, &mut meshes, chunk, cutout_child, cutout, || {
+                MeshMaterial3d(materials.cutout.clone())
+            }),
+            // water lets light through: a shadow from it would be wrong, and
+            // costs a draw in every shadow pass
+            fluid: swap_part(&mut cmds, &mut meshes, chunk, fluid_child, fluid, || {
+                (MeshMaterial3d(materials.fluid.clone()), NotShadowCaster)
+            }),
+        };
+        match parts {
+            Some(mut parts) => {
+                parts.set_if_neq(now);
             }
-            // water changed: swap the child's mesh
-            (false, Some(FluidMesh(child))) => {
-                cmds.entity(*child).insert(Mesh3d(meshes.add(fluid)));
+            None if now != ChunkParts::default() => {
+                cmds.entity(chunk).insert(now);
             }
-            // first water in this chunk: a child at the chunk's origin to draw it
-            (false, None) => {
-                let child = cmds
-                    .spawn((
-                        Mesh3d(meshes.add(fluid)),
-                        MeshMaterial3d(materials.fluid.clone()),
-                        // water lets light through: a shadow from it would be
-                        // wrong, and costs a draw in every shadow pass
-                        NotShadowCaster,
-                        ChildOf(chunk),
-                    ))
-                    .id();
-                cmds.entity(chunk).insert(FluidMesh(child));
-            }
+            None => {}
         }
+    }
+}
+
+/// Puts `mesh` on one of a chunk's children: spawning it (with `extra`) if
+/// the chunk has none, despawning it if the mesh is empty. Returns the child
+/// the chunk has now
+fn swap_part<B: Bundle>(
+    cmds: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    chunk: Entity,
+    child: Option<Entity>,
+    mesh: Mesh,
+    extra: impl FnOnce() -> B,
+) -> Option<Entity> {
+    match (mesh.count_vertices() == 0, child) {
+        (true, None) => None,
+        (true, Some(child)) => {
+            cmds.entity(child).despawn();
+            None
+        }
+        (false, Some(child)) => {
+            cmds.entity(child).insert(Mesh3d(meshes.add(mesh)));
+            Some(child)
+        }
+        (false, None) => Some(
+            cmds.spawn((Mesh3d(meshes.add(mesh)), extra(), ChildOf(chunk)))
+                .id(),
+        ),
     }
 }

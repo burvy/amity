@@ -10,7 +10,7 @@
 use super::settings::{SurfaceRule, When};
 
 /// What the rules can ask about one column
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Facts {
     /// Ground height in metres, before rounding to blocks, plus the wobble (see
     /// `SurfaceSettings::wobble`)

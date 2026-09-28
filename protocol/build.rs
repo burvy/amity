@@ -23,6 +23,8 @@ struct BlockEntry {
     #[serde(default)]
     fluid: bool,
     #[serde(default)]
+    see_through: bool,
+    #[serde(default)]
     textures: Textures,
 }
 
@@ -68,7 +70,7 @@ fn main() {
     // air is always id 0: not solid, never drawn, so it has no textures
     let mut consts = String::from("    pub const AIR: Block = Block(0);\n");
     let mut defs = String::from(
-        "    BlockDef { name: \"air\", solid: false, fluid: false, top:\"\", side: \"\", bottom: \"\" },\n",
+        "    BlockDef { name: \"air\", solid: false, fluid: false, see_through: false, top:\"\", side: \"\", bottom: \"\" },\n",
     );
     for (i, entry) in entries.iter().enumerate() {
         let name = &entry.name;
@@ -82,6 +84,10 @@ fn main() {
         // fluids are never solid: players move through them and see through them
         let solid = entry.solid.unwrap_or(!entry.fluid);
         assert!(!(solid && entry.fluid), "{BLOCKS}: {name} can't be both solid and a fluid");
+        assert!(
+            solid || !entry.see_through,
+            "{BLOCKS}: {name} is see_through, which is for solid blocks (fluids are see-through already)"
+        );
 
         // each face: the named texture, or the block's own name
         let face = |texture: &Option<String>| {
@@ -101,8 +107,8 @@ fn main() {
 
         consts += &format!("    pub const {}: Block = Block({id});\n", name.to_uppercase());
         defs += &format!(
-            "    BlockDef {{ name: {name:?}, solid: {solid}, fluid: {}, top: {top:?}, side: {side:?}, bottom: {bottom:?} }},\n",
-            entry.fluid
+            "    BlockDef {{ name: {name:?}, solid: {solid}, fluid: {}, see_through: {}, top: {top:?}, side: {side:?}, bottom: {bottom:?} }},\n",
+            entry.fluid, entry.see_through
         );
     }
 
@@ -126,9 +132,11 @@ fn main() {
     let mut item_defs = String::new();
     for (id, entry) in entries.iter().enumerate() {
         let name = &entry.name;
+        // a block's icon is its side texture
+        let icon = entry.textures.side.as_deref().unwrap_or(name);
         item_consts += &format!("    pub const {}: Item = Item({id});\n", name.to_uppercase());
         item_defs += &format!(
-            "    ItemDef {{ name: {name:?}, stack: {}, icon: {name:?}, places: Some(Block::{}) }},\n",
+            "    ItemDef {{ name: {name:?}, stack: {}, icon: {icon:?}, places: Some(Block::{}) }},\n",
             default_stack(),
             name.to_uppercase()
         );

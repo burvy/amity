@@ -14,6 +14,7 @@ pub mod chunk;
 pub mod config;
 pub mod edit;
 pub mod messages;
+pub mod structure;
 
 /// Everything the voxel world registers on both client and server
 pub struct WorldProtocolPlugin;

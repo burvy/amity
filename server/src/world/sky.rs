@@ -51,14 +51,20 @@ impl SkyHeights {
         let (column, i) = column_of(pos);
         let heights = self.0.get_mut(&column)?;
         let was = heights[i];
-        let now = if block != Block::AIR {
+        // see-through blocks (leaves) let the sky's light through, so they
+        // don't cover a column: the ground under a tree stays open to the sky
+        let covers = |block: Block| block != Block::AIR && !block.is_see_through();
+        let now = if covers(block) {
             // placed: the column is covered at least up to it
             was.max(pos.y + 1)
         } else if pos.y + 1 == was {
-            // the top block went: down to the next block that isn't air. Where
+            // the top block went: down to the next block that covers it. Where
             // the world isn't generated (far below), stop and count it as covered
             let mut y = pos.y - 1;
-            while blocks.get(IVec3::new(pos.x, y, pos.z)) == Some(Block::AIR) {
+            while blocks
+                .get(IVec3::new(pos.x, y, pos.z))
+                .is_some_and(|block| !covers(block))
+            {
                 y -= 1;
             }
             y + 1

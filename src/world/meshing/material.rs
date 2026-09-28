@@ -1,6 +1,7 @@
-//! The material every chunk is drawn with: bevy's standard lit material, plus
-//! a small shader (`block.wgsl`) that repeats each block's texture across the
-//! mesher's merged rectangles
+//! The materials chunks are drawn with: bevy's standard lit material, plus a
+//! small shader (`block.wgsl`) that repeats each block's texture across the
+//! mesher's merged rectangles, and the same for the shadow passes
+//! (`block_prepass.wgsl`)
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -13,8 +14,9 @@ use bevy::{
 
 use super::textures::{atlas, tile_inset, tile_size, ATLAS};
 
-/// The block shader, embedded (see `MeshingPlugin`)
+/// The block shaders, embedded (see `MeshingPlugin`)
 const SHADER: &str = "embedded://amity/world/meshing/block.wgsl";
+const PREPASS_SHADER: &str = "embedded://amity/world/meshing/block_prepass.wgsl";
 
 /// The standard material, drawn through the block shader
 pub type BlockMaterial = ExtendedMaterial<StandardMaterial, BlockTiling>;
@@ -40,13 +42,19 @@ impl MaterialExtension for BlockTiling {
     fn fragment_shader() -> ShaderRef {
         SHADER.into()
     }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        PREPASS_SHADER.into()
+    }
 }
 
-/// Shared by every chunk. Both use the block texture atlas
+/// Shared by every chunk. All use the block texture atlas
 #[derive(Resource)]
 pub struct ChunkMaterials {
     /// solid blocks
     pub solid: Handle<BlockMaterial>,
+    /// see-through blocks like leaves: holes where the texture is transparent
+    pub cutout: Handle<BlockMaterial>,
     /// fluids: blended with what's behind them by the texture's alpha
     pub fluid: Handle<BlockMaterial>,
 }
@@ -95,6 +103,14 @@ pub fn init_chunk_material(
             // rough and matte, like real stone, soil and wood: little shine from
             // the sun, and only faint reflections of the sky
             perceptual_roughness: 0.9,
+            ..default()
+        })),
+        cutout: mats.add(block(StandardMaterial {
+            base_color_texture: Some(atlas.clone()),
+            perceptual_roughness: 0.9,
+            // pixels mostly transparent aren't drawn at all: no blending, so no
+            // sorting, and the holes show in the shadows too
+            alpha_mode: AlphaMode::Mask(0.5),
             ..default()
         })),
         fluid: mats.add(block(StandardMaterial {
