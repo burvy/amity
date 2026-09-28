@@ -2,24 +2,24 @@
 //! players identically. Speeds and the jump aim for how a real person moves
 
 /// Walking speed (metres per second). A person walks at about 1.4
-pub const WALK_SPEED: f32 = 1.5;
+pub const WALK_SPEED: f32 = 4.0;
 /// Running speed while sprint is held (metres per second)
-pub const RUN_SPEED: f32 = 5.0;
+pub const RUN_SPEED: f32 = 12.0;
 
 /// How fast a player on the ground speeds up to, or slows down from, the speed
 /// they want (metres per second, per second). At 20, running starts or stops
 /// in a quarter of a second
-pub const GROUND_ACCEL: f32 = 20.0;
+pub const GROUND_ACCEL: f32 = 10.0;
 /// How much a player can steer mid-air (metres per second, per second). Low,
 /// so a jump mostly carries the speed it started with
 pub const AIR_ACCEL: f32 = 2.0;
 
 /// How high a jump lifts the body (metres). Clears one block (0.5 m); a person
 /// jumps about half a metre from standing
-pub const JUMP_HEIGHT: f32 = 0.55;
+pub const JUMP_HEIGHT: f32 = 1.25;
 /// The fastest a falling player gets (metres per second): a person falling
 /// through air stops speeding up at about this
-pub const TERMINAL_SPEED: f32 = 55.0;
+pub const TERMINAL_SPEED: f32 = 50.0;
 
 /// The body is an upright box: this wide and deep (metres)
 pub const PLAYER_WIDTH: f32 = 0.6;
