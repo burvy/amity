@@ -1,6 +1,6 @@
 //! Working out the horizon map, on a background thread: the ground's height in
 //! every cell, then from each cell, how high the terrain rises around it in
-//! each of 8 directions
+//! each of 16 directions
 
 use std::f32::consts::{FRAC_PI_2, TAU};
 
@@ -12,9 +12,11 @@ use bevy::{platform::collections::HashMap, prelude::*};
 
 use super::config::*;
 
-/// Directions looked in: every 45 degrees, starting along +X and turning
-/// towards +Z. The shader picks between them by the sun's direction the same way
-pub const DIRECTIONS: usize = 8;
+/// Directions looked in: every 22.5 degrees, starting along +X and turning
+/// towards +Z. The shader picks between them by the sun's direction the same
+/// way. Fewer (8 was tried) lets narrow peaks fall between two directions, and
+/// their shadows shrink or vanish when the sun is in between
+pub const DIRECTIONS: usize = 16;
 
 /// No ground known here (not loaded)
 const UNKNOWN: f32 = f32::NEG_INFINITY;
@@ -27,8 +29,8 @@ pub struct Snapshot {
     pub corner: IVec2,
 }
 
-/// The map's texture data: 2 layers of MAP_CELLS x MAP_CELLS, 4 bytes per cell
-/// each (directions 0-3, then 4-7). Each byte is the horizon's height above
+/// The map's texture data: DIRECTIONS / 4 layers of MAP_CELLS x MAP_CELLS, 4
+/// bytes per cell each (directions 0-3, then 4-7, and so on). Each byte is the horizon's height above
 /// flat, 0 (flat) to 255 (straight up). A cell's texel is its world cell
 /// position wrapped to the map size, so the shader finds it from a world
 /// position alone, without knowing where the map is centred
@@ -152,8 +154,8 @@ mod tests {
         // towards +X (direction 0): up at about atan((40 - 1) / 20)
         let expected = ((40.0 - SELF_SHADOW_BIAS) / 20.0).atan();
         assert!((angles[0] - expected).abs() < 1e-4, "{}", angles[0]);
-        // the opposite way (direction 4): nothing
-        assert_eq!(angles[4], 0.0);
+        // the opposite way: nothing
+        assert_eq!(angles[DIRECTIONS / 2], 0.0);
     }
 
     #[test]

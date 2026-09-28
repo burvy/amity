@@ -19,6 +19,7 @@ use super::{
 };
 use crate::{
     player::definition::MainPlayerCamera,
+    settings::definition::Settings,
     world::meshing::material::{BlockMaterial, ChunkMaterials},
 };
 
@@ -135,5 +136,27 @@ pub fn finish_update(
     if let Some(chunk_materials) = chunk_materials {
         materials.get_mut(&chunk_materials.solid);
         materials.get_mut(&chunk_materials.fluid);
+    }
+}
+
+/// Tells the block shader how far the shadow map reaches (the Shadows
+/// setting), so its shadows fade into the horizon's before they end
+pub fn shadow_reach(
+    settings: Res<Settings>,
+    chunk_materials: Option<Res<ChunkMaterials>>,
+    mut materials: ResMut<Assets<BlockMaterial>>,
+) {
+    let Some(chunk_materials) = chunk_materials else {
+        return;
+    };
+    let reach = settings
+        .graphics
+        .shadows
+        .cascades()
+        .map_or(0.0, |(_, distance, _)| distance);
+    for handle in [&chunk_materials.solid, &chunk_materials.fluid] {
+        if let Some(mut material) = materials.get_mut(handle) {
+            material.extension.set_shadow_reach(reach);
+        }
     }
 }

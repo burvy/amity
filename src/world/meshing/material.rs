@@ -14,7 +14,7 @@ use bevy::{
 use super::textures::{atlas, tile_inset, tile_size, ATLAS};
 use crate::world::{
     horizon::{
-        config::{CELL_BLOCKS, MAP_CELLS, SOFTNESS_DEG},
+        config::{CELL_BLOCKS, MAP_CELLS, SHADOW_FADE, SOFTNESS_DEG},
         logic::HorizonMap,
     },
 };
@@ -39,7 +39,9 @@ pub struct BlockTiling {
     #[sampler(102)]
     horizon: Handle<Image>,
     /// x: 1 / the map's width in metres (world position to map UV). y: how
-    /// far light fades as it sets behind the skyline, in radians. zw: unused
+    /// far light fades as it sets behind the skyline, in radians. z: how far
+    /// the shadow map reaches, in metres (0 when off). w: the share of that
+    /// over which its shadows fade into the horizon's
     #[uniform(103)]
     horizon_params: Vec4,
 }
@@ -50,8 +52,13 @@ impl BlockTiling {
         Self {
             tiling: tile_size().extend(tile_inset()).extend(0.0),
             horizon,
-            horizon_params: Vec4::new(1.0 / map_metres, SOFTNESS_DEG.to_radians(), 0.0, 0.0),
+            horizon_params: Vec4::new(1.0 / map_metres, SOFTNESS_DEG.to_radians(), 0.0, SHADOW_FADE),
         }
+    }
+
+    /// How far the shadow map reaches, in metres (0 when shadows are off)
+    pub fn set_shadow_reach(&mut self, metres: f32) {
+        self.horizon_params.z = metres;
     }
 }
 

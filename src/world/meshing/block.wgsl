@@ -42,14 +42,17 @@ const HALF_PI: f32 = 1.57079632679;
 // xy: a tile's size in the atlas. z: how far in from a tile's edges to sample
 // (a share of the tile), so neighbouring tiles never bleed in
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> tiling: vec4<f32>;
-// The horizon map: per 2 m cell, how high the skyline is in 8 directions (0 is
-// flat, 1 straight up), directions 0-3 in layer 0 and 4-7 in layer 1. Direction
-// k points k * 45 degrees from +X towards +Z. It repeats across the world: a
-// cell's texel is its position wrapped to the map's size
+// The horizon map: per 2 m cell, how high the skyline is in 16 directions (0
+// is flat, 1 straight up), 4 per layer: directions 0-3 in layer 0, 4-7 in
+// layer 1, and so on. Direction k points k * 22.5 degrees from +X towards +Z.
+// It repeats across the world: a cell's texel is its position wrapped to the
+// map's size
 @group(#{MATERIAL_BIND_GROUP}) @binding(101) var horizon_map: texture_2d_array<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(102) var horizon_sampler: sampler;
 // x: 1 / the map's width in metres. y: how far light fades as it sets behind
-// the skyline, in radians
+// the skyline, in radians. z: how far the shadow map reaches, in metres (0
+// when off). w: the share of that over which its shadows fade into the
+// horizon's
 @group(#{MATERIAL_BIND_GROUP}) @binding(103) var<uniform> horizon: vec4<f32>;
 
 @fragment
@@ -77,15 +80,22 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     return out;
 }
 
-// The directional light (sun, moon) that apply_pbr_lighting added here but
-// that terrain hides: each light's contribution, as bevy works it out
-// (including its shadow map), times the share of it that's hidden
+// The directional light (sun, moon) that apply_pbr_lighting added here, less
+// what should reach here. Bevy lit it as much as its shadow map allows (`shadow`
+// below); what should reach is that, faded out towards the shadow map's reach,
+// times what the skyline and the sky leave (`visible`). Negative where the
+// fade gives back light the shadow map took (the fade band)
 fn hidden_light(in: PbrInput, sky: f32) -> vec3<f32> {
-    // the skyline around here, in the 8 directions
+    // the skyline around here, in the 16 directions
     let uv = in.world_position.xz * horizon.x;
-    let low = textureSampleLevel(horizon_map, horizon_sampler, uv, 0, 0.0);
-    let high = textureSampleLevel(horizon_map, horizon_sampler, uv, 1, 0.0);
-    var skyline = array<f32, 8>(low.r, low.g, low.b, low.a, high.r, high.g, high.b, high.a);
+    let a = textureSampleLevel(horizon_map, horizon_sampler, uv, 0, 0.0);
+    let b = textureSampleLevel(horizon_map, horizon_sampler, uv, 1, 0.0);
+    let c = textureSampleLevel(horizon_map, horizon_sampler, uv, 2, 0.0);
+    let d = textureSampleLevel(horizon_map, horizon_sampler, uv, 3, 0.0);
+    var skyline = array<f32, 16>(
+        a.r, a.g, a.b, a.a, b.r, b.g, b.b, b.a,
+        c.r, c.g, c.b, c.a, d.r, d.g, d.b, d.a,
+    );
     // where the sky can't reach (deep in a cave) the sun can't either. Fades
     // in over the darkest quarter of sky light
     let open = smoothstep(0.0, 0.25, sky);
@@ -120,6 +130,14 @@ fn hidden_light(in: PbrInput, sky: f32) -> vec3<f32> {
         view_bindings::view.view_from_world[3].z
     ), in.world_position);
 
+    // 0 where the shadow map is trusted, rising to 1 at its reach, beyond
+    // which there's only the horizon
+    let reach = horizon.z;
+    var fade = 1.0;
+    if reach > 0.0 {
+        fade = smoothstep(reach * (1.0 - horizon.w), reach, -view_z);
+    }
+
     var hidden = vec3(0.0);
     for (var i: u32 = 0u; i < view_bindings::lights.n_directional_lights; i = i + 1u) {
         let light = &view_bindings::lights.directional_lights[i];
@@ -127,20 +145,29 @@ fn hidden_light(in: PbrInput, sky: f32) -> vec3<f32> {
 
         // how much of this light the skyline and the lack of sky leave
         let elevation = asin(clamp(to_light.y, -1.0, 1.0));
-        let turn = fract(atan2(to_light.z, to_light.x) / TAU) * 8.0;
-        let first = u32(floor(turn)) % 8u;
-        let height = mix(skyline[first], skyline[(first + 1u) % 8u], fract(turn)) * HALF_PI;
+        let turn = fract(atan2(to_light.z, to_light.x) / TAU) * 16.0;
+        let first = u32(floor(turn)) % 16u;
+        let height = mix(skyline[first], skyline[(first + 1u) % 16u], fract(turn)) * HALF_PI;
         let visible = smoothstep(height - horizon.y, height + horizon.y, elevation) * open;
-        if visible >= 0.999 {
+        // in full view, and not in the fade band (where the shadow map is
+        // trusted, or beyond its reach, where it lit everything): as bevy lit it
+        if visible >= 0.999 && (fade <= 0.0 || fade >= 1.0) {
             continue;
         }
 
+        // facing away from the light, it adds nothing: nothing to take away,
+        // and no need for the (costly) shadow map lookup
+        let light_contrib = lighting::directional_light(i, &input, true);
+        if all(light_contrib <= vec3(0.0)) {
+            continue;
+        }
         var shadow = 1.0;
         if ((in.flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u
                 && ((*light).flags & mesh_view_types::DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u) {
             shadow = shadows::fetch_directional_shadow(i, in.world_position, in.world_normal, view_z, in.frag_coord.xy);
         }
-        hidden += lighting::directional_light(i, &input, true) * shadow * (1.0 - visible);
+        let reaching = mix(shadow, 1.0, fade) * visible;
+        hidden += light_contrib * (shadow - reaching);
     }
     return hidden;
 }

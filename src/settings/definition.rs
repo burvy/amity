@@ -89,13 +89,15 @@ impl ShadowQuality {
     /// (cascades, metres they reach, shadow map pixels per side). Each
     /// cascade draws the terrain once more every frame, so cascades cost the
     /// most; the first one (the sharpest) covers only the nearest few metres,
-    /// so 2048 pixels is already sharp there
+    /// so 2048 pixels is already sharp there. They don't need to reach far:
+    /// beyond them, horizon shadows (`world/horizon`) darken the terrain, so
+    /// the shadow map is for the detail close by
     pub fn cascades(self) -> Option<(usize, f32, usize)> {
         match self {
             Self::Off => None,
             Self::Low => Some((1, 16.0, 128)),
             Self::Medium => Some((2, 64.0, 1024)),
-            Self::High => Some((3, 128.0, 2048)),
+            Self::High => Some((2, 64.0, 2048)),
         }
     }
 

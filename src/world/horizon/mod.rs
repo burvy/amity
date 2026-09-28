@@ -2,7 +2,7 @@
 //! shadow map reaches, for next to nothing.
 //!
 //! For every 2 m cell of loaded ground, the map stores how high the terrain
-//! rises around it in 8 directions (like standing there and noting the angle
+//! rises around it in 16 directions (like standing there and noting the angle
 //! of the skyline all round). When the sun is lower than the skyline in its
 //! direction, the cell is in shadow. That's worked out once, on a background
 //! thread, and only again as chunks change or the player moves far; drawing
@@ -11,6 +11,7 @@
 //!
 //! Near the player, the shadow map still draws shadows exactly, of everything;
 //! the horizon adds the big shapes' shadows everywhere, even with Shadows Off.
+//! Towards the shadow map's reach, its shadows fade into the horizon's.
 //! The block shader (`meshing/block.wgsl`) applies it, and also keeps sunlight
 //! out of places the sky can't reach, like caves.
 //!
@@ -31,5 +32,9 @@ impl Plugin for HorizonPlugin {
         app.init_resource::<logic::HorizonUpdate>();
         app.add_systems(PreStartup, logic::init_horizon_map);
         app.add_systems(Update, (logic::start_update, logic::finish_update).chain());
+        app.add_systems(
+            Update,
+            logic::shadow_reach.run_if(resource_changed::<crate::settings::definition::Settings>),
+        );
     }
 }

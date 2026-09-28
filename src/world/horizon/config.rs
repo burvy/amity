@@ -19,8 +19,14 @@ pub const SEARCH_CELLS: i32 = 64;
 pub const SELF_SHADOW_BIAS: f32 = 1.0;
 
 /// Degrees over which light fades out as it sets behind the horizon: the sun
-/// is 0.5 degrees across, and the horizon is only known per cell
-pub const SOFTNESS_DEG: f32 = 1.5;
+/// is 0.5 degrees across (its real shadows' soft edge), and the horizon is
+/// only known per cell. Larger blurs far shadows more
+pub const SOFTNESS_DEG: f32 = 0.75;
+
+/// The shadow map stops at its reach (the Shadows setting). Over this last
+/// share of it, its sharp shadows fade into the horizon's, so there's no edge
+/// where one ends and the other begins
+pub const SHADOW_FADE: f32 = 0.3;
 
 /// Seconds between redoing the map while chunks keep arriving or changing
 pub const UPDATE_SECS: f32 = 1.0;
