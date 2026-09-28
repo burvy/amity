@@ -1,4 +1,7 @@
-use amity_protocol::{net::config::SERVER_BIND_ADDR, player::definition::PlayerMarker};
+use amity_protocol::{
+    net::config::{SERVER_ADDR, SERVER_BIND_ADDR},
+    player::definition::PlayerMarker,
+};
 use bevy::prelude::*;
 use lightyear::prelude::*;
 use lightyear::{
@@ -29,6 +32,12 @@ pub fn start_server(mut cmds: Commands) -> Result {
         .spawn((
             NetcodeServer::new(NetcodeConfig {
                 client_timeout_secs: CLIENT_TIMEOUT_SECS,
+                // clients put the address they connect to (the public one) in
+                // their connect token, and the server turns away tokens not
+                // meant for it. It listens on every address (`LocalAddr`),
+                // which only counts as a match for localhost, so name the
+                // public one too
+                additional_expected_addresses: vec![SERVER_ADDR],
                 ..default()
             }),
             LocalAddr(SERVER_BIND_ADDR),
