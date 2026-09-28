@@ -29,7 +29,7 @@ pub fn add_physics(
             // players move 64 times a second, but frames come at any rate: show
             // them one tick behind, blended between the last two ticks, so they
             // glide instead of judder
-            FrameInterpolate::<Position>::default(),
+            FrameInterpolate,
             // steps up and down, smoothed for the camera and model
             Stepped::default(),
             StepGlide::default(),

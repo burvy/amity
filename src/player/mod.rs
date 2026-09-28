@@ -1,10 +1,8 @@
 //! Our player and the ones we see: input, camera, bodies, and the interact prompt
 
 use amity_protocol::player::movement;
-use avian3d::prelude::Position;
 use bevy::{prelude::*, transform::TransformSystems};
 use lightyear::{
-    frame_interpolation::FrameInterpolationPlugin,
     input::client::InputSystems,
     prelude::{is_in_rollback, Predicted, RollbackSystems},
 };
@@ -44,10 +42,10 @@ impl Plugin for PlayerPlugin {
             ),
         );
 
-        // Smooth players between fixed ticks. The camera follows the smoothed
+        // Players are smoothed between fixed ticks (`FrameInterpolate`, set up
+        // by lightyear's avian plugin). The camera follows the smoothed
         // position, so it goes after interpolation (and rollback's visual
         // correction), and before transforms are handed to rendering
-        app.add_plugins(FrameInterpolationPlugin::<Position>::default());
         app.add_systems(
             PostUpdate,
             (

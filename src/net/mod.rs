@@ -18,6 +18,9 @@ impl Plugin for NetPlugin {
         app.add_plugins(ClientPlugins {
             tick_duration: Duration::from_secs_f64(TIMESTEP),
         });
+        let (prediction, input_timeline) = logic::prediction_resources();
+        app.insert_resource(prediction);
+        app.insert_resource(input_timeline);
         app.add_systems(Startup, logic::connect);
     }
 }

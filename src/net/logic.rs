@@ -20,7 +20,7 @@ pub fn connect(mut cmds: Commands) -> Result {
 
     let client = cmds
         .spawn((
-            Client::default(),
+            Client,
             LocalAddr(CLIENT_ADDR),
             PeerAddr(SERVER_ADDR),
             Link::default(),
@@ -34,15 +34,24 @@ pub fn connect(mut cmds: Commands) -> Result {
             )?,
             WebTransportClientIo {
                 certificate_digest: String::new(),
+                // None: connect to `PeerAddr`, as https://<address>
+                target: None,
             },
-            PredictionManager::default(),
-            InputTimelineConfig::default().with_sync_config(SyncConfig {
-                jitter_margin: JITTER_MARGIN,
-                ..default()
-            }),
         ))
         .id();
 
     cmds.trigger(Connect { entity: client });
     Ok(())
+}
+
+/// Turns on prediction, and sets how far ahead of the server our inputs run.
+/// Both are app-wide (there's one local timeline), so they're resources
+pub fn prediction_resources() -> (PredictionManager, InputTimelineConfig) {
+    (
+        PredictionManager::default(),
+        InputTimelineConfig::default().with_sync_config(SyncConfig {
+            jitter_margin: JITTER_MARGIN,
+            ..default()
+        }),
+    )
 }

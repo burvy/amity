@@ -37,7 +37,7 @@ bevy = { version = "0.19", default-features = false, features = [
     # key and mouse button bindings are saved in the settings file
     "serialize",
 ]}
-lightyear = { version = "0.28.0", default-features = false, features = [
+lightyear = { version = "0.30.1", default-features = false, features = [
     "std",
     "client",
     "netcode",
