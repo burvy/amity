@@ -42,7 +42,7 @@ pub const DEBUG_BACKGROUND: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
 
 /// Pause menu (Esc): a list down the left over the dimmed game, and a panel for
 /// Help and Settings beside it. The pixel font is sharp at multiples of 16 px
-pub const MENU_DIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.6);
+pub const MENU_DIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.9);
 pub const MENU_MARGIN: f32 = 48.0;
 pub const MENU_LIST_WIDTH: f32 = 240.0;
 pub const MENU_PANEL_MAX_WIDTH: f32 = 900.0;
