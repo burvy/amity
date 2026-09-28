@@ -3,8 +3,9 @@
 //! - `config.rs`: sizes and colours (placeholder styling, meant to be redesigned)
 //! - `font.rs`: the one font all UI text uses (swap in your own there)
 //! - `debug.rs`: the debug screen (F3)
-//! - `hotbar.rs`: the hotbar down the right edge
-//! - `picker.rs`: the creative block picker (Tab)
+//! - `inventory.rs`: the hotbar down the right edge, the inventory that slides
+//!   out beside it while Tab is held, and the item held on the cursor
+//! - `picker.rs`: the creative block picker, beside the open inventory
 
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 
@@ -13,7 +14,7 @@ use crate::world::meshing::material::BlockAtlas;
 mod config;
 mod debug;
 pub mod font;
-mod hotbar;
+mod inventory;
 mod picker;
 
 pub struct UiPlugin;
@@ -29,11 +30,16 @@ impl Plugin for UiPlugin {
             Update,
             (
                 // built once the block atlas (for icons) exists
-                hotbar::spawn_hotbar.run_if(resource_added::<BlockAtlas>),
-                hotbar::update_hotbar,
-                picker::toggle_picker,
+                (inventory::spawn_inventory, picker::spawn_picker)
+                    .run_if(resource_added::<BlockAtlas>),
+                inventory::open_inventory,
+                inventory::slide_panel,
+                inventory::click_slots,
+                inventory::update_slots,
+                picker::show_picker,
                 picker::click_picker,
-            ),
+            )
+                .chain(),
         );
     }
 }

@@ -16,12 +16,21 @@ pub const HOTBAR_MARGIN: f32 = 16.0;
 /// The item count, in a slot's bottom-right corner
 pub const HOTBAR_COUNT_SIZE: f32 = 14.0;
 
-/// Block picker (creative): a grid of every item over a dimmed screen
-pub const PICKER_COLUMNS: u16 = 9;
+/// Inventory: 4 more columns of slots (same size and gap as the hotbar) that
+/// slide out from the right edge, next to the hotbar, while Tab is held.
+/// Seconds the slide takes (roughly: it eases in)
+pub const INVENTORY_SLIDE_SECS: f32 = 0.12;
+/// The item held on the mouse cursor: its icon size
+pub const CURSOR_ICON_SIZE: f32 = 40.0;
+
+/// Block picker (creative): a grid of every item, left of the inventory
+pub const PICKER_COLUMNS: u16 = 6;
 pub const PICKER_SLOT_SIZE: f32 = 52.0;
 pub const PICKER_ICON_SIZE: f32 = 40.0;
 pub const PICKER_GAP: f32 = 6.0;
-pub const PICKER_DIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.6);
+/// Space between the picker and the inventory
+pub const PICKER_MARGIN: f32 = 24.0;
+pub const PICKER_BACKGROUND: Color = Color::srgba(0.0, 0.0, 0.0, 0.45);
 pub const PICKER_SLOT: Color = Color::srgba(1.0, 1.0, 1.0, 0.08);
 pub const PICKER_SLOT_HOVERED: Color = Color::srgba(1.0, 1.0, 1.0, 0.25);
 

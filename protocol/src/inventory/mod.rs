@@ -1,4 +1,4 @@
-//! Items, the hotbar, game modes and flying
+//! Items, the inventory (hotbar included), game modes and flying
 
 use bevy::prelude::*;
 use lightyear::prelude::{
@@ -15,7 +15,7 @@ pub struct InventoryProtocolPlugin;
 
 impl Plugin for InventoryProtocolPlugin {
     fn build(&self, app: &mut App) {
-        app.component::<definition::Hotbar>().replicate();
+        app.component::<definition::Inventory>().replicate();
         app.component::<definition::GameMode>().replicate();
         // movement depends on it, so clients predict it like position
         app.component::<definition::Flying>().replicate().predict();
@@ -25,7 +25,7 @@ impl Plugin for InventoryProtocolPlugin {
             ..default()
         })
         .add_direction(NetworkDirection::ClientToServer);
-        app.register_message::<definition::SetSlot>()
+        app.register_message::<definition::InventoryAction>()
             .add_direction(NetworkDirection::ClientToServer);
         app.register_message::<definition::ToggleFlight>()
             .add_direction(NetworkDirection::ClientToServer);

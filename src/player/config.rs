@@ -19,8 +19,8 @@ pub const KEY_CROUCH: KeyCode = KeyCode::KeyC;
 pub const KEY_INTERACT: KeyCode = KeyCode::KeyE;
 /// Shows the debug screen (frame rate, position, chunks, time...)
 pub const KEY_DEBUG: KeyCode = KeyCode::F3;
-/// Opens the creative block picker
-pub const KEY_PICKER: KeyCode = KeyCode::Tab;
+/// Hold to slide the inventory out (and, in creative, the block picker)
+pub const KEY_INVENTORY: KeyCode = KeyCode::Tab;
 /// Selects hotbar slots 1 to 5
 pub const KEY_SLOTS: [KeyCode; 5] = [
     KeyCode::Digit1,

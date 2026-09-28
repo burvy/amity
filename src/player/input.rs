@@ -50,7 +50,8 @@ pub fn rotate_player_resource(
     mut look_res: ResMut<PlayerInfo>,
     mouse_mot_res: Res<AccumulatedMouseMotion>,
 ) {
-    if !look_res.paused {
+    // the mouse moves the cursor instead while the inventory is open
+    if !look_res.paused && !look_res.menu_open {
         look_res.update_look(mouse_mot_res.delta);
     }
 }
@@ -83,8 +84,9 @@ pub fn buffer_input(
         jump: keys.pressed(KEY_JUMP),
         sprint: keys.any_pressed(KEY_SPRINT),
         interact: keys.pressed(KEY_INTERACT),
-        primary: mouse.pressed(BUTTON_PRIMARY),
-        secondary: mouse.pressed(BUTTON_SECONDARY),
+        // clicks go to the inventory while it's open, not to the world
+        primary: mouse.pressed(BUTTON_PRIMARY) && !look_res.menu_open,
+        secondary: mouse.pressed(BUTTON_SECONDARY) && !look_res.menu_open,
         descend: keys.pressed(KEY_CROUCH),
         slot: look_res.slot,
     };

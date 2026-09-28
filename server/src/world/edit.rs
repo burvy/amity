@@ -1,6 +1,7 @@
 use amity_protocol::{
     inventory::{
-        definition::{GameMode, Hotbar},
+        config::HOTBAR_SLOTS,
+        definition::{GameMode, Inventory},
         item::Item,
     },
     player::{
@@ -27,8 +28,8 @@ use super::streaming::logic::ChunkView;
 /// client's view is corrected.
 ///
 /// Placing needs the selected hotbar slot to hold the block's item; in survival
-/// it uses one up, and breaking puts the block's item in the hotbar (if there's
-/// room). Creative players place anything they've picked, endlessly.
+/// it uses one up, and breaking puts the block's item in the inventory (if
+/// there's room). Creative players place anything they've picked, endlessly.
 pub fn receive_edits(
     spatial: SpatialQuery,
     mut players: Query<
@@ -36,7 +37,7 @@ pub fn receive_edits(
             &Position,
             &ControlledBy,
             &GameMode,
-            &mut Hotbar,
+            &mut Inventory,
             &ActionState<PlayerInputs>,
         ),
         With<PlayerMarker>,
@@ -54,7 +55,7 @@ pub fn receive_edits(
 ) {
     let mut accepted = Vec::new();
     for (client, mut receiver, mut sender, _) in &mut clients {
-        let Some((position, _, mode, mut hotbar, action)) = players
+        let Some((position, _, mode, mut inventory, action)) = players
             .iter_mut()
             .find(|(_, controlled, ..)| controlled.owner == client)
         else {
@@ -63,23 +64,24 @@ pub fn receive_edits(
         };
         let eye = aim::eye(position.0);
         let survival = *mode == GameMode::Survival;
-        let slot = action.0.slot as usize;
+        // the selected hotbar slot (the client can't pick one past the hotbar)
+        let slot = (action.0.slot as usize).min(HOTBAR_SLOTS - 1);
         for edit in receiver.receive() {
             let before = blocks.get(edit.pos);
             // placing: the selected item must place this block
             let holding = edit.block == Block::AIR
-                || hotbar
+                || inventory
                     .get(slot)
                     .is_some_and(|stack| stack.item.places() == Some(edit.block));
             if holding && edit_allowed(&edit, eye, &spatial, &blocks) {
                 if survival {
                     if edit.block == Block::AIR {
-                        // what was broken goes in the hotbar, if there's room
+                        // what was broken goes in the inventory, if there's room
                         if let Some(item) = before.and_then(Item::of_block) {
-                            hotbar.add(item, 1);
+                            inventory.add(item, 1);
                         }
                     } else {
-                        hotbar.take_one(slot);
+                        inventory.take_one(slot);
                     }
                 }
                 blocks.set(edit.pos, edit.block);

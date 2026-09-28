@@ -1,5 +1,7 @@
 use amity_protocol::{
-    inventory::definition::{Flying, GameMode, Hotbar, ItemStack, SetSlot, ToggleFlight},
+    inventory::definition::{
+        Flying, GameMode, Inventory, InventoryAction, ItemStack, ToggleFlight,
+    },
     player::{
         config::PLAYER_HALF_HEIGHT,
         definition::{PlayerBody, PlayerInputs, PlayerMarker},
@@ -103,45 +105,51 @@ pub fn keep_players_replicating(
 }
 
 /// A full stack of each of `STARTING_HOTBAR`
-fn starting_hotbar() -> Hotbar {
-    let mut hotbar = Hotbar::default();
+fn starting_hotbar() -> Inventory {
+    let mut inventory = Inventory::default();
     for item in STARTING_HOTBAR {
-        hotbar.add(item, item.max_stack());
+        inventory.add(item, item.max_stack());
     }
-    hotbar
+    inventory
 }
 
-/// One-off actions from clients: filling hotbar slots from the creative block
-/// picker, and toggling flight. Both are creative only; anything else is ignored.
+/// One-off actions from clients: inventory clicks, the creative block picker,
+/// closing the inventory, and toggling flight (creative only).
 /// Runs in Update: lightyear clears received messages every frame
 pub fn receive_actions(
     mut clients: Query<
         (
             Entity,
-            &mut MessageReceiver<SetSlot>,
+            &mut MessageReceiver<InventoryAction>,
             &mut MessageReceiver<ToggleFlight>,
         ),
         With<Connected>,
     >,
-    mut players: Query<(&ControlledBy, &GameMode, &mut Hotbar, &mut Flying), With<PlayerMarker>>,
+    mut players: Query<(&ControlledBy, &GameMode, &mut Inventory, &mut Flying), With<PlayerMarker>>,
 ) {
-    for (client, mut set_slots, mut toggles) in &mut clients {
-        let Some((_, mode, mut hotbar, mut flying)) = players
+    for (client, mut actions, mut toggles) in &mut clients {
+        let Some((_, mode, mut inventory, mut flying)) = players
             .iter_mut()
             .find(|(controlled, ..)| controlled.owner == client)
         else {
             // no player yet: drop what arrived
-            set_slots.receive().for_each(drop);
+            actions.receive().for_each(drop);
             toggles.receive().for_each(drop);
             continue;
         };
         let creative = *mode == GameMode::Creative;
-        for SetSlot { slot, item } in set_slots.receive() {
-            if creative && slot < hotbar.slots.len() {
-                hotbar.slots[slot] = item.map(|item| ItemStack {
-                    item,
-                    count: item.max_stack(),
-                });
+        for action in actions.receive() {
+            match action {
+                InventoryAction::Click { slot, click } => inventory.click(slot, click),
+                InventoryAction::Pick { item } => {
+                    if creative {
+                        inventory.cursor = item.map(|item| ItemStack {
+                            item,
+                            count: item.max_stack(),
+                        });
+                    }
+                }
+                InventoryAction::Close => inventory.put_back_cursor(),
             }
         }
         for ToggleFlight in toggles.receive() {

@@ -1,5 +1,5 @@
 use amity_protocol::{
-    inventory::definition::Hotbar,
+    inventory::definition::Inventory,
     player::definition::PlayerInputs,
     world::{
         block::Block,
@@ -18,27 +18,36 @@ use super::chunks::IncomingChunks;
 /// Asks the server to make our player's edits. Nothing changes locally until the
 /// server's `BlockChanged` arrives, so the client's world is only ever the server's.
 /// Reads this tick's inputs (empty while paused), and runs per tick, so holding a
-/// button edits at the tick rate whatever the FPS. Until the answer arrives the
-/// same edit is re-sent each tick; the server rejects the duplicates harmlessly.
+/// button edits at the tick rate whatever the FPS.
+///
+/// - Breaking: every tick the button is held, so dragging across blocks breaks
+///   them all. Until the answer arrives the same break is re-sent each tick; the
+///   server rejects the duplicates harmlessly
+/// - Placing: one block per click. Holding sprint (Shift) as well places every
+///   tick, for building walls and bridges quickly
 pub fn request_edits(
     spatial: SpatialQuery,
     player: Single<
-        (Entity, &Position, &ActionState<PlayerInputs>, Option<&Hotbar>),
+        (Entity, &Position, &ActionState<PlayerInputs>, Option<&Inventory>),
         With<Controlled>,
     >,
     blocks: Blocks,
     mut sender: Single<&mut MessageSender<EditBlock>>,
+    mut was_placing: Local<bool>,
 ) {
-    let (player, position, action, hotbar) = player.into_inner();
+    let (player, position, action, inventory) = player.into_inner();
     let input = &action.0;
+    // a new click: place was up last tick and is down now
+    let click = input.secondary && !*was_placing;
+    *was_placing = input.secondary;
     // the block the selected slot's item places, if it places one
-    let place = hotbar
-        .and_then(|hotbar| hotbar.get(input.slot as usize))
+    let place = inventory
+        .and_then(|inventory| inventory.get(input.slot as usize))
         .and_then(|stack| stack.item.places());
     // break wins when both are held
     let edit_action = if input.primary {
         EditAction::Break
-    } else if input.secondary {
+    } else if input.secondary && (click || input.sprint) {
         EditAction::Place
     } else {
         return;
