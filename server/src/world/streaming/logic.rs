@@ -14,7 +14,7 @@ use lightyear::connection::{client::Connected, client_of::ClientOf};
 use lightyear::prelude::{ControlledBy, MessageReceiver, MessageSender};
 
 use super::config::{SEND_BYTES_PER_TICK, UNLOAD_MARGIN, VIEW_DISTANCE};
-use crate::world::area;
+use crate::world::{area, sky::SkyHeights};
 
 /// Message framing added to each chunk's own size when counting the budget
 const MESSAGE_OVERHEAD: usize = 16;
@@ -70,6 +70,7 @@ pub fn stream_chunks(
     chunks: Query<&Chunk>,
     generated: Query<(), Added<Chunk>>,
     index: Res<ChunkIndex>,
+    sky: Res<SkyHeights>,
     mut offsets: Local<HashMap<IVec3, Vec<IVec3>>>,
 ) {
     let new_chunks = !generated.is_empty();
@@ -125,10 +126,12 @@ pub fn stream_chunks(
                 break;
             }
             let chunk = chunk.compacted();
-            bytes += chunk.byte_size() + MESSAGE_OVERHEAD;
+            let sky = sky.chunk_sky(ChunkPos(pos));
+            bytes += chunk.byte_size() + sky.byte_size() + MESSAGE_OVERHEAD;
             chunk_sender.send::<WorldChannel>(ChunkData {
                 pos: ChunkPos(pos),
                 chunk,
+                sky,
             });
             view.sent.insert(pos);
         }

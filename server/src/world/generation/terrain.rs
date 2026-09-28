@@ -764,11 +764,25 @@ impl Terrain {
         columns
     }
 
-    /// All the blocks of one chunk. Runs on a background thread for every chunk
-    /// the server needs, so it should stay fast
+    /// All the blocks of one chunk (the tests' shorthand)
+    #[cfg(test)]
     pub fn generate(&self, pos: ChunkPos) -> Chunk {
-        let origin = pos.0 * CHUNK_SIZE;
+        self.generate_with_sky(pos).0
+    }
+
+    /// All the blocks of one chunk, and its columns' heights: the first block
+    /// up with only air above (the top of the ground, or of water on it; see
+    /// `world/sky.rs`), x + z * 32. Runs on a background thread for every chunk
+    /// the server needs, so it should stay fast
+    pub fn generate_with_sky(&self, pos: ChunkPos) -> (Chunk, Vec<i32>) {
         let columns = self.columns(pos);
+        let heights = columns.iter().map(|column| column.water).collect();
+        (self.blocks(pos, &columns), heights)
+    }
+
+    /// Every block of the chunk at `pos`, from its columns
+    fn blocks(&self, pos: ChunkPos, columns: &[Column]) -> Chunk {
+        let origin = pos.0 * CHUNK_SIZE;
 
         // Shortcut: most chunks are entirely sky, water or underground. Compare
         // the chunk's vertical span (world block heights `bottom..=top`) with the
@@ -803,7 +817,7 @@ impl Terrain {
         }
 
         // Step 2: the chunk crosses the ground or the sea's surface somewhere
-        self.fill(origin.y, &columns)
+        self.fill(origin.y, columns)
     }
 
     /// Step 2 of `generate`: every block of the chunk, column by column, for a

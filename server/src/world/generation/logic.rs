@@ -17,14 +17,14 @@ use super::{
 };
 use crate::{
     player::definition::SpawnPoint,
-    world::{area, streaming::config::VIEW_DISTANCE},
+    world::{area, sky::SkyHeights, streaming::config::VIEW_DISTANCE},
 };
 
 /// Chunks being generated on background threads, by position. Each task also
 /// builds the chunk's collider, which takes a few milliseconds for a chunk of
 /// mixed blocks: too long to do for dozens of chunks on the main thread
 #[derive(Resource, Default)]
-pub struct Generating(HashMap<IVec3, Task<(Chunk, Option<Collider>)>>);
+pub struct Generating(HashMap<IVec3, Task<(Chunk, Option<Collider>, Vec<i32>)>>);
 
 /// Starts generating the missing chunks around spawn and every player, nearest
 /// first, keeping at most MAX_GENERATING in flight.
@@ -83,9 +83,9 @@ pub fn start_generating(
             // each task gets its own handle: tasks can't borrow resources
             let terrain = terrain.clone();
             let task = pool.spawn(async move {
-                let chunk = terrain.generate(ChunkPos(pos));
+                let (chunk, sky) = terrain.generate_with_sky(ChunkPos(pos));
                 let collider = chunk_collider(&chunk);
-                (chunk, collider)
+                (chunk, collider, sky)
             });
             generating.0.insert(pos, task);
         }
@@ -95,16 +95,22 @@ pub fn start_generating(
     }
 }
 
-/// Spawns the chunks whose generation finished
+/// Spawns the chunks whose generation finished, and keeps their columns'
+/// heights (the first chunk of a column to finish brings them).
 /// Runs right after `start_generating` each tick. A chunk is only spawned after
 /// its task is done, so a half-built chunk is never visible
-pub fn finish_generating(mut cmds: Commands, mut generating: ResMut<Generating>) {
+pub fn finish_generating(
+    mut cmds: Commands,
+    mut generating: ResMut<Generating>,
+    mut sky: ResMut<SkyHeights>,
+) {
     // `retain` keeps the entries the closure returns true for. `check_ready` peeks
     // at a task without waiting: Some(chunk) once finished, None while running.
     // Finished tasks spawn their chunk (streaming then sends it to clients) and
     // are dropped from the map; running ones stay for the next tick
     generating.0.retain(|&pos, task| match check_ready(task) {
-        Some((chunk, collider)) => {
+        Some((chunk, collider, heights)) => {
+            sky.generated(ChunkPos(pos), heights);
             let mut entity = cmds.spawn(chunk_body(ChunkPos(pos), chunk));
             if let Some(collider) = collider {
                 entity.insert(collider);

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     block::Block,
-    chunk::{Chunk, ChunkPos},
+    chunk::{Chunk, ChunkPos, ChunkSky, ColumnSky},
 };
 
 /// Server -> client, ordered + reliable. Carries whole chunks (and unloads),
@@ -28,6 +28,8 @@ pub struct EditChannel;
 pub struct ChunkData {
     pub pos: ChunkPos,
     pub chunk: Chunk,
+    /// where it's open to the sky (see `chunk/sky.rs`)
+    pub sky: ChunkSky,
 }
 
 /// Server -> client: this chunk is out of range, drop it
@@ -41,6 +43,9 @@ pub struct UnloadChunk {
 pub struct BlockChanged {
     pub pos: IVec3,
     pub block: Block,
+    /// Set when this changed the height of the block's column: placing on top
+    /// raises it, breaking the top block lowers it (see `chunk/sky.rs`)
+    pub sky: Option<ColumnSky>,
 }
 
 /// Client -> server: how many chunks out (sideways) the player wants loaded, from

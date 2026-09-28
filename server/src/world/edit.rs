@@ -21,7 +21,7 @@ use bevy::prelude::*;
 use lightyear::connection::{client::Connected, client_of::ClientOf};
 use lightyear::prelude::{input::native::ActionState, ControlledBy, MessageReceiver, MessageSender};
 
-use super::streaming::logic::ChunkView;
+use super::{sky::SkyHeights, streaming::logic::ChunkView};
 
 /// Checks and applies clients' block edits. Accepted edits go to every client
 /// that has the chunk; a rejected edit gets the real block sent back, so that
@@ -52,6 +52,7 @@ pub fn receive_edits(
         (With<ClientOf>, With<Connected>),
     >,
     mut blocks: Blocks,
+    mut sky: ResMut<SkyHeights>,
 ) {
     let mut accepted = Vec::new();
     for (client, mut receiver, mut sender, _) in &mut clients {
@@ -88,11 +89,13 @@ pub fn receive_edits(
                 accepted.push(BlockChanged {
                     pos: edit.pos,
                     block: edit.block,
+                    sky: sky.edited(edit.pos, edit.block, &blocks),
                 });
             } else if let Some(actual) = blocks.get(edit.pos) {
                 sender.send::<BlockChannel>(BlockChanged {
                     pos: edit.pos,
                     block: actual,
+                    sky: None,
                 });
             }
         }

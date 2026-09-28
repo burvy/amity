@@ -7,6 +7,7 @@ use lightyear::core::timeline::is_in_rollback;
 pub(crate) mod chunks;
 mod edit;
 pub(crate) mod meshing;
+pub(crate) mod sky;
 
 /// The systems that apply what the server sent. Meshing runs after these
 #[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]
@@ -19,6 +20,7 @@ impl Plugin for WorldPlugin {
         app.add_plugins(meshing::MeshingPlugin);
         app.init_resource::<chunks::IncomingChunks>();
         app.init_resource::<edit::HeldChanges>();
+        app.add_message::<sky::SkyChanged>();
         // unloads before chunks, so a chunk dropped and resent in one frame ends up
         // loaded; block changes last, so they land on chunks spawned this frame
         app.add_systems(

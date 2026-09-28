@@ -4,6 +4,8 @@
 //! 2. Ambient occlusion: each face corner is darkened by the blocks around it,
 //!    so creases, corners and the foot of walls get soft shading. It's worked
 //!    out here, once per mesh, and stored per vertex: it costs nothing to draw.
+//!    Sky light (`light.rs`) is stored per corner the same way, averaged over
+//!    the blocks around the corner so it fades smoothly across faces.
 //! 3. Greedy meshing: neighbouring faces that look the same (same texture, same
 //!    shading) are merged into one large rectangle. A flat field that was
 //!    thousands of squares becomes a handful, which every render pass (the
@@ -22,7 +24,7 @@ use bevy::{
 };
 
 use super::{
-    config::AO_BRIGHTNESS,
+    config::{AO_BRIGHTNESS, SKY_LIGHT_MAX, SKY_LIGHT_POWER},
     padded::PaddedChunk,
     textures::{face_tile, tile_corner},
 };
@@ -70,16 +72,21 @@ struct Look {
     tile: u32,
     /// ambient occlusion per corner, in `CORNERS` order: 0 darkest, 3 open
     ao: [u8; 4],
+    /// sky light per corner, in `CORNERS` order: the average level of the
+    /// blocks around the corner, times 4 (so 0 to 4 * SKY_LIGHT_MAX)
+    light: [u8; 4],
 }
 
 impl Look {
     /// Whether the shading changes along u (then a merge along u would stretch
     /// it wrongly), or along v
     fn varies_along_u(&self) -> bool {
-        self.ao[0] != self.ao[1] || self.ao[3] != self.ao[2]
+        let differs = |c: [u8; 4]| c[0] != c[1] || c[3] != c[2];
+        differs(self.ao) || differs(self.light)
     }
     fn varies_along_v(&self) -> bool {
-        self.ao[0] != self.ao[3] || self.ao[1] != self.ao[2]
+        let differs = |c: [u8; 4]| c[0] != c[3] || c[1] != c[2];
+        differs(self.ao) || differs(self.light)
     }
 }
 
@@ -167,22 +174,38 @@ fn look(chunk: &PaddedChunk, face: &Face, pos: IVec3) -> Option<Look> {
     } else {
         return None;
     };
+    let solid = |p: IVec3| chunk.get(p).is_solid();
+    // towards each corner, along u and along v
+    let towards = CORNERS.map(|corner| (face.u * (corner.x * 2 - 1), face.v * (corner.y * 2 - 1)));
     // a fluid's surface isn't shaded: it would show as dark patches on water
     let ao = if fluid {
         [3; 4]
     } else {
-        CORNERS.map(|corner| {
-            // towards this corner, along u and along v
-            let du = face.u * (corner.x * 2 - 1);
-            let dv = face.v * (corner.y * 2 - 1);
-            let solid = |p: IVec3| chunk.get(p).is_solid();
-            vertex_ao(solid(front + du), solid(front + dv), solid(front + du + dv))
-        })
+        towards.map(|(du, dv)| vertex_ao(solid(front + du), solid(front + dv), solid(front + du + dv)))
     };
+    let light = towards.map(|(du, dv)| {
+        // the blocks in front of the face around this corner, leaving out
+        // solid ones (they're dark inside), and the diagonal if both sides are
+        // solid (it's walled off from the corner)
+        let (side_1, side_2) = (solid(front + du), solid(front + dv));
+        let around = [
+            Some(front),
+            (!side_1).then_some(front + du),
+            (!side_2).then_some(front + dv),
+            (!(side_1 && side_2) && !solid(front + du + dv)).then_some(front + du + dv),
+        ];
+        let (sum, count) = around
+            .into_iter()
+            .flatten()
+            .fold((0u32, 0u32), |(sum, count), p| (sum + chunk.light(p) as u32, count + 1));
+        // the average, times 4 and rounded (`front` is never solid: count >= 1)
+        ((sum * 4 + count / 2) / count) as u8
+    });
     Some(Look {
         fluid,
         tile: face_tile(block, face.normal),
         ao,
+        light,
     })
 }
 
@@ -208,7 +231,8 @@ struct MeshBuilder {
     uvs: Vec<[f32; 2]>,
     /// the texture's tile in the atlas (its top-left corner)
     tiles: Vec<[f32; 2]>,
-    /// ambient occlusion, as a brightness the texture is multiplied by
+    /// rgb: ambient occlusion, as a brightness the texture is multiplied by.
+    /// a: how much of the sky's light reaches here (0 to 1), see `block.wgsl`
     colours: Vec<[f32; 4]>,
     indices: Vec<u32>,
 }
@@ -221,12 +245,13 @@ impl MeshBuilder {
         // along a positive normal, the face is on the block's far side
         let origin = block_pos + face.normal.max(IVec3::ZERO);
         let tile = tile_corner(look.tile);
-        for (corner, ao) in CORNERS.iter().zip(look.ao) {
+        for ((corner, ao), light) in CORNERS.iter().zip(look.ao).zip(look.light) {
             let pos = (origin + face.u * corner.x * size.x + face.v * corner.y * size.y).as_vec3();
             self.positions.push((pos * BLOCK_SIZE).to_array());
             self.uvs.push(texture_uv(face.normal, pos));
             let brightness = AO_BRIGHTNESS[ao as usize];
-            self.colours.push([brightness, brightness, brightness, 1.0]);
+            let sky = (light as f32 / (4 * SKY_LIGHT_MAX) as f32).powf(SKY_LIGHT_POWER);
+            self.colours.push([brightness, brightness, brightness, sky]);
         }
         self.normals.extend([face.normal.as_vec3().to_array(); 4]);
         self.tiles.extend([tile; 4]);
@@ -277,10 +302,15 @@ mod tests {
     use amity_protocol::world::chunk::Chunk;
 
     use super::*;
+    use crate::world::meshing::padded::Neighbourhood;
+
+    fn padded<'a>(chunk: &Chunk, neighbour: impl Fn(IVec3) -> Option<&'a Chunk>) -> PaddedChunk {
+        PaddedChunk::new(&Neighbourhood::new(chunk, neighbour))
+    }
 
     /// (solid, fluid) rectangles in a chunk alone (no neighbours)
     fn rectangles(chunk: &Chunk) -> (usize, usize) {
-        let meshes = chunk_mesh(&PaddedChunk::new(chunk, |_| None));
+        let meshes = chunk_mesh(&padded(chunk, |_| None));
         (
             meshes.solid.count_vertices() / 4,
             meshes.fluid.count_vertices() / 4,
@@ -345,7 +375,7 @@ mod tests {
             }
         }
         chunk.set(IVec3::new(2, 1, 2), Block::STONE);
-        let padded = PaddedChunk::new(&chunk, |_| None);
+        let padded = padded(&chunk, |_| None);
         let top = &FACES[2];
         // the floor face right beside the block: its two corners against it are dark
         let beside = look(&padded, top, IVec3::new(3, 0, 2)).unwrap();
@@ -368,7 +398,7 @@ mod tests {
             let mut other = Chunk::default();
             other.set(across, Block::STONE);
 
-            let padded = PaddedChunk::new(&chunk, |o| (o == face.normal).then_some(&other));
+            let padded = padded(&chunk, |o| (o == face.normal).then_some(&other));
             assert_eq!(chunk_mesh(&padded).solid.count_vertices(), 5 * 4, "{:?}", face.normal);
         }
     }
@@ -376,7 +406,7 @@ mod tests {
     #[test]
     fn solid_chunk_surrounded_by_solid_has_no_faces() {
         let stone = Chunk::Uniform(Block::STONE);
-        let mesh = chunk_mesh(&PaddedChunk::new(&stone, |_| Some(&stone))).solid;
+        let mesh = chunk_mesh(&padded(&stone, |_| Some(&stone))).solid;
         assert_eq!(mesh.count_vertices(), 0);
     }
 

@@ -5,9 +5,11 @@ use bevy::prelude::*;
 
 pub mod collider;
 pub mod pos;
+pub mod sky;
 pub mod storage;
 
 pub use pos::{ChunkIndex, ChunkPos};
+pub use sky::{ChunkSky, ColumnSky};
 pub use storage::Chunk;
 
 /// Agreed-upon chunk entity for both client and server

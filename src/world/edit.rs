@@ -4,6 +4,7 @@ use amity_protocol::{
     world::{
         block::Block,
         blocks::Blocks,
+        chunk::ColumnSky,
         chunk::{ChunkIndex, ChunkPos},
         edit::{player_edit, EditAction},
         messages::{BlockChanged, EditBlock, EditChannel},
@@ -13,7 +14,7 @@ use avian3d::prelude::*;
 use bevy::{platform::collections::HashMap, prelude::*};
 use lightyear::prelude::{input::native::ActionState, Controlled, MessageReceiver, MessageSender};
 
-use super::chunks::IncomingChunks;
+use super::{chunks::IncomingChunks, sky::Skies};
 
 /// Asks the server to make our player's edits. Nothing changes locally until the
 /// server's `BlockChanged` arrives, so the client's world is only ever the server's.
@@ -66,7 +67,7 @@ pub fn request_edits(
 /// a chunk it has already sent, so the chunk, when it arrives, is from before the
 /// change, and applying the held changes on top of it is correct
 #[derive(Resource, Default)]
-pub struct HeldChanges(HashMap<IVec3, Vec<(IVec3, Block)>>);
+pub struct HeldChanges(HashMap<IVec3, Vec<(IVec3, Block, Option<ColumnSky>)>>);
 
 /// The server's block changes: the only way the client's world changes after a
 /// chunk arrives. Changes for chunks not here yet are held until they are, as are
@@ -78,6 +79,7 @@ pub fn receive_block_changes(
     index: Res<ChunkIndex>,
     incoming: Res<IncomingChunks>,
     mut blocks: Blocks,
+    mut skies: Skies,
 ) {
     let ready = |chunk: ChunkPos| index.contains(chunk) && !incoming.contains(chunk);
     // first, changes held for chunks that have arrived since
@@ -85,17 +87,26 @@ pub fn receive_block_changes(
         if !ready(ChunkPos(chunk)) {
             return true;
         }
-        for &(pos, block) in changes.iter() {
+        for &(pos, block, sky) in changes.iter() {
             blocks.set(pos, block);
+            if let Some(sky) = sky {
+                skies.column_changed(pos, sky);
+            }
         }
         false
     });
-    for BlockChanged { pos, block } in receiver.receive() {
+    for BlockChanged { pos, block, sky } in receiver.receive() {
+        // a changed column height reaches the column's chunks that are here now.
+        // A copy of this chunk from before the change may still be on its way:
+        // the height is set on it again when the held change is applied
+        if let Some(sky) = sky {
+            skies.column_changed(pos, sky);
+        }
         let chunk = ChunkPos::of_block(pos).0;
         if ready(chunk) {
             blocks.set(pos, block);
         } else {
-            held.0.entry(chunk.0).or_default().push((pos, block));
+            held.0.entry(chunk.0).or_default().push((pos, block, sky));
         }
     }
 }

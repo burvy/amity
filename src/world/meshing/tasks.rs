@@ -5,7 +5,7 @@ use std::{collections::HashSet, iter};
 use amity_protocol::world::{
     block::Block,
     blocks::BlockSet,
-    chunk::{Chunk, ChunkIndex, ChunkPos},
+    chunk::{Chunk, ChunkIndex, ChunkPos, ChunkSky},
     config::CHUNK_SIZE,
 };
 use bevy::{
@@ -14,10 +14,13 @@ use bevy::{
     tasks::{futures::check_ready, AsyncComputeTaskPool, Task},
 };
 
+use crate::world::sky::SkyChanged;
+
 use super::{
     material::ChunkMaterials,
     mesher::{chunk_mesh, ChunkMeshes},
-    padded::{neighbour_offsets, PaddedChunk},
+    config::SKY_LIGHT_MAX,
+    padded::{neighbour_offsets, Neighbourhood, PaddedChunk},
 };
 
 /// Marks a chunk for (re)meshing
@@ -39,15 +42,18 @@ pub struct FluidMesh(Entity);
 /// border faces, and the shading at its edges (ambient occlusion looks
 /// diagonally), depend on them, so meshing sooner would be redone as each one
 /// arrives. A new chunk can complete itself or any chunk around it. An edited
-/// block remeshes its chunk, plus every chunk whose border includes it (up to 7
-/// more, for a block in a chunk's corner). Chunks at the edge of the loaded
-/// area are never meshed; that ring is what the server's view distance leaves
-/// out.
+/// block remeshes its chunk, plus every chunk its effect reaches: sky light
+/// spreads up to SKY_LIGHT_MAX blocks, so a block that close to a chunk's edge
+/// changes the chunk across it too (up to 7 more, near a corner). A chunk whose
+/// sky changed (`world/sky.rs`) remeshes with every chunk around it. Chunks at
+/// the edge of the loaded area are never meshed; that ring is what the
+/// server's view distance leaves out.
 pub fn mark_dirty(
     mut cmds: Commands,
     added: Query<&ChunkPos, Added<Chunk>>,
     positions: Query<&ChunkPos>,
     mut changes: MessageReader<BlockSet>,
+    mut skies: MessageReader<SkyChanged>,
     index: Res<ChunkIndex>,
 ) {
     let ready = |pos: IVec3| {
@@ -63,19 +69,22 @@ pub fn mark_dirty(
             continue;
         };
         dirty.insert(pos.0);
-        // the chunks this block borders: on each axis, the one beyond it if the
-        // block is at that edge
-        let last = CHUNK_SIZE - 1;
+        // the chunks it reaches: on each axis, the one beyond it if the block
+        // is within light's reach of that edge
+        let reach = SKY_LIGHT_MAX as i32;
         for offset in neighbour_offsets() {
-            let borders = (0..3).all(|axis| match offset[axis] {
-                -1 => change.local[axis] == 0,
-                1 => change.local[axis] == last,
+            let reaches = (0..3).all(|axis| match offset[axis] {
+                -1 => change.local[axis] < reach,
+                1 => change.local[axis] >= CHUNK_SIZE - reach,
                 _ => true,
             });
-            if borders {
+            if reaches {
                 dirty.insert(pos.0 + offset);
             }
         }
+    }
+    for SkyChanged(pos) in skies.read() {
+        dirty.extend(iter::once(*pos).chain(neighbour_offsets().map(|offset| *pos + offset)));
     }
     for pos in dirty.into_iter().filter(|&pos| ready(pos)) {
         if let Some(entity) = index.get(ChunkPos(pos)) {
@@ -84,12 +93,13 @@ pub fn mark_dirty(
     }
 }
 
-/// Snapshots dirty chunks on the main thread and meshes the snapshots on the
-/// async compute pool. All-air chunks have nothing to draw and skip it.
+/// Copies dirty chunks and the chunks around them on the main thread, and
+/// lights and meshes the copies on the async compute pool. All-air chunks have
+/// nothing to draw and skip it.
 pub fn start_mesh_tasks(
     mut cmds: Commands,
     dirty: Query<(Entity, &ChunkPos, &Chunk, Option<&FluidMesh>), With<NeedsMesh>>,
-    chunks: Query<&Chunk>,
+    chunks: Query<(&Chunk, Option<&ChunkSky>)>,
     index: Res<ChunkIndex>,
 ) {
     let pool = AsyncComputeTaskPool::get();
@@ -104,12 +114,14 @@ pub fn start_mesh_tasks(
         }
         let mut entity = cmds.entity(entity);
         entity.remove::<NeedsMesh>();
-        let padded = PaddedChunk::new(chunk, |offset| {
+        let area = Neighbourhood::gather(|offset| {
             index
                 .get(ChunkPos(pos.0 + offset))
-                .and_then(|neighbour| chunks.get(neighbour).ok())
+                .and_then(|chunk| chunks.get(chunk).ok())
         });
-        entity.insert(MeshTask(pool.spawn(async move { chunk_mesh(&padded) })));
+        entity.insert(MeshTask(pool.spawn(async move {
+            chunk_mesh(&PaddedChunk::new(&area))
+        })));
     }
 }
 

@@ -1,7 +1,9 @@
 //! Turning chunks into meshes, on background threads
 //!
 //! - `tasks.rs`: which chunks need a mesh, and running the mesher off the main thread
-//! - `padded.rs`: the snapshot of a chunk plus its border that the mesher reads
+//! - `padded.rs`: the copies of a chunk and the chunks around it that meshing
+//!   reads, and the chunk plus a one-block border the mesher looks things up in
+//! - `light.rs`: sky light, spreading from open sky into caves and water
 //! - `mesher.rs`: the mesher itself: visible faces, ambient occlusion, and
 //!   merging matching faces into large rectangles
 //! - `textures.rs`: which atlas tile each block face shows
@@ -14,6 +16,7 @@ use bevy::{asset::embedded_asset, pbr::MaterialPlugin, prelude::*};
 use super::ReceiveWorld;
 
 mod config;
+mod light;
 pub(crate) mod material;
 mod mesher;
 mod padded;

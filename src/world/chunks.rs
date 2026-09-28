@@ -1,7 +1,7 @@
 //! Chunks arriving from and leaving at the server's request
 
 use amity_protocol::world::{
-    chunk::{chunk_body, collider::chunk_collider, Chunk, ChunkIndex, ChunkPos},
+    chunk::{chunk_body, collider::chunk_collider, Chunk, ChunkIndex, ChunkPos, ChunkSky},
     messages::{ChunkData, UnloadChunk},
 };
 use avian3d::prelude::Collider;
@@ -18,7 +18,7 @@ use lightyear::prelude::MessageReceiver;
 /// frames on the main thread. A chunk is only spawned once its collider is ready,
 /// so players never stand on a chunk that can't hold them yet
 #[derive(Resource, Default)]
-pub struct IncomingChunks(HashMap<IVec3, Task<(Chunk, Option<Collider>)>>);
+pub struct IncomingChunks(HashMap<IVec3, Task<(Chunk, ChunkSky, Option<Collider>)>>);
 
 impl IncomingChunks {
     /// Whether a (newer) copy of this chunk is on its way in
@@ -39,11 +39,11 @@ pub fn receive_chunks(
     mut incoming: ResMut<IncomingChunks>,
 ) {
     let pool = AsyncComputeTaskPool::get();
-    for ChunkData { pos, chunk } in receiver.receive() {
+    for ChunkData { pos, chunk, sky } in receiver.receive() {
         // replacing a task drops the old one, which cancels it
         let task = pool.spawn(async move {
             let collider = chunk_collider(&chunk);
-            (chunk, collider)
+            (chunk, sky, collider)
         });
         incoming.0.insert(pos.0, task);
     }
@@ -56,7 +56,7 @@ pub fn spawn_ready_chunks(
     index: Res<ChunkIndex>,
 ) {
     incoming.0.retain(|&pos, task| {
-        let Some((chunk, collider)) = check_ready(task) else {
+        let Some((chunk, sky, collider)) = check_ready(task) else {
             return true;
         };
         let pos = ChunkPos(pos);
@@ -66,7 +66,7 @@ pub fn spawn_ready_chunks(
         // Visibility: a chunk's water is drawn by a child entity, and bevy only
         // shows children of entities that have one. Chunks with no solid mesh
         // (open sea) wouldn't get one otherwise, and their water would be invisible
-        let mut entity = cmds.spawn((chunk_body(pos, chunk), Visibility::default()));
+        let mut entity = cmds.spawn((chunk_body(pos, chunk), sky, Visibility::default()));
         if let Some(collider) = collider {
             entity.insert(collider);
         }
