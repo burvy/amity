@@ -9,6 +9,7 @@ use lightyear::{
 
 pub(crate) mod config;
 pub mod definition;
+mod flashlight;
 mod glide;
 mod input;
 mod interact;
@@ -18,6 +19,7 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<flashlight::FlashlightSwitch>();
         app.insert_resource(definition::PlayerInfo {
             paused: true,
             ..default()
@@ -34,6 +36,7 @@ impl Plugin for PlayerPlugin {
                 input::select_slot,
                 input::toggle_flight,
                 input::rotate_player_resource,
+                flashlight::switch_flashlight,
                 interact::client_interaction_checker,
                 interact::can_interact_prompt,
                 // players replicated to us get a body to simulate and a mesh to see
@@ -50,7 +53,11 @@ impl Plugin for PlayerPlugin {
             PostUpdate,
             (
                 glide::glide_steps,
-                (logic::camera_follow_player, logic::pose_models),
+                (
+                    logic::camera_follow_player,
+                    logic::pose_models,
+                    flashlight::aim_beams,
+                ),
             )
                 .chain()
                 .after(RollbackSystems::VisualCorrection)

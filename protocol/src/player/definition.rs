@@ -36,6 +36,9 @@ pub struct PlayerInputs {
     /// The selected hotbar slot, 0..HOTBAR_SLOTS. Sent every tick like the rest,
     /// since it's a state (which slot), not an event
     pub slot: u8,
+    /// Whether the player's flashlight is on. Only for show, but sent like
+    /// the rest so every player sees everyone's beam
+    pub flashlight: bool,
 }
 
 /// `MapEntities` exists to satisfy the `InputPlugin`'s trait bound.

@@ -213,6 +213,7 @@ pub enum Action {
     Break,
     Place,
     Interact,
+    Flashlight,
     Inventory,
     Slot1,
     Slot2,
@@ -224,7 +225,7 @@ pub enum Action {
 
 impl Action {
     /// In the order the controls screen lists them
-    pub const ALL: [Action; 17] = [
+    pub const ALL: [Action; 18] = [
         Self::Forward,
         Self::Back,
         Self::Left,
@@ -235,6 +236,7 @@ impl Action {
         Self::Break,
         Self::Place,
         Self::Interact,
+        Self::Flashlight,
         Self::Inventory,
         Self::Slot1,
         Self::Slot2,
@@ -265,6 +267,7 @@ impl Action {
             Self::Break => "Break",
             Self::Place => "Place",
             Self::Interact => "Interact",
+            Self::Flashlight => "Flashlight (on by itself at night)",
             Self::Inventory => "Inventory (hold)",
             Self::Slot1 => "Hotbar slot 1",
             Self::Slot2 => "Hotbar slot 2",
@@ -289,6 +292,7 @@ impl Action {
             Self::Break => Mouse(MouseButton::Left),
             Self::Place => Mouse(MouseButton::Right),
             Self::Interact => Key(KeyCode::KeyE),
+            Self::Flashlight => Key(KeyCode::KeyF),
             Self::Inventory => Key(KeyCode::Tab),
             Self::Slot1 => Key(KeyCode::Digit1),
             Self::Slot2 => Key(KeyCode::Digit2),

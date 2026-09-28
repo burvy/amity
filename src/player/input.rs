@@ -17,7 +17,7 @@ use lightyear::prelude::{
     Controlled, MessageSender,
 };
 
-use super::{config::*, definition::PlayerInfo};
+use super::{config::*, definition::PlayerInfo, flashlight::FlashlightSwitch};
 use crate::settings::{
     definition::{Action, Settings},
     input::ActionInput,
@@ -43,10 +43,13 @@ pub fn buffer_input(
     mut action: Single<&mut ActionState<PlayerInputs>, With<InputMarker<PlayerInputs>>>,
     input: ActionInput,
     look_res: Res<PlayerInfo>, // yaw/pitch stored in resource
+    flashlight: Res<FlashlightSwitch>,
 ) {
     if look_res.paused {
         action.0 = PlayerInputs {
             look: look_res.look,
+            // the flashlight stays as it is while paused
+            flashlight: flashlight.on,
             ..default()
         };
         return;
@@ -68,6 +71,7 @@ pub fn buffer_input(
         secondary: input.pressed(Action::Place) && !look_res.menu_open,
         descend: input.pressed(Action::Crouch),
         slot: look_res.slot,
+        flashlight: flashlight.on,
     };
 }
 

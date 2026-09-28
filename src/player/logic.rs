@@ -15,6 +15,7 @@ use lightyear::{
 
 use super::{
     definition::{MainPlayerCamera, PlayerInfo},
+    flashlight,
     glide::StepGlide,
 };
 
@@ -50,11 +51,14 @@ pub fn draw_players(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for player in players.iter() {
-        cmds.entity(player).insert(Visibility::default()).with_child((
-            PlayerModel,
-            Mesh3d(meshes.add(Cuboid::new(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH))),
-            MeshMaterial3d(materials.add(Color::WHITE)),
-        ));
+        cmds.entity(player)
+            .insert(Visibility::default())
+            .with_child((
+                PlayerModel,
+                Mesh3d(meshes.add(Cuboid::new(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH))),
+                MeshMaterial3d(materials.add(Color::WHITE)),
+            ))
+            .with_child(flashlight::beam());
     }
 }
 
