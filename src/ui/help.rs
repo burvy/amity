@@ -6,10 +6,10 @@
 //! `**bold**`, `*italic*`, `` `code` ``, `[links](...)` (shown as text),
 //! `---` rules, code blocks and tables.
 
-use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*};
+use bevy::prelude::*;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
-use super::{config::*, font::UiFont};
+use super::{config::*, font::UiFont, scroll::spawn_scrolling};
 
 /// The help text. Embedded like the textures, so native and web show the same
 const HELP: &str = include_str!("../../assets/help.md");
@@ -96,7 +96,9 @@ fn parse(markdown: &str) -> Vec<Block> {
                 blocks.push(Block::Code(code_block.take().unwrap_or_default()));
             }
             Event::Start(Tag::Table(_)) => table = Some(Vec::new()),
-            Event::End(TagEnd::Table) => blocks.push(Block::Table(table.take().unwrap_or_default())),
+            Event::End(TagEnd::Table) => {
+                blocks.push(Block::Table(table.take().unwrap_or_default()))
+            }
             Event::Start(Tag::TableHead) | Event::Start(Tag::TableRow) => {
                 if let Some(table) = &mut table {
                     table.push(Vec::new());
@@ -133,69 +135,45 @@ fn parse(markdown: &str) -> Vec<Block> {
     blocks
 }
 
-/// The help page's scrolling box
-#[derive(Component)]
-pub struct HelpScroll;
-
-/// The scrollbar's thumb
-#[derive(Component)]
-pub struct HelpThumb;
-
 /// Builds the help page into `parent` (the pause menu's panel), with `extra`
 /// components on its root
 pub fn spawn_help(parent: &mut ChildSpawnerCommands, font: &UiFont, extra: impl Bundle) {
     let blocks = parse(HELP);
-    let mut page = parent.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            ..default()
-        },
-        extra,
-    ));
-    page.with_children(|page| {
-        page.spawn((
-            HelpScroll,
-            Node {
-                flex_direction: FlexDirection::Column,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                overflow: Overflow::scroll_y(),
-                padding: UiRect::right(Val::Px(MENU_SCROLLBAR_WIDTH * 3.0)),
-                row_gap: Val::Px(HELP_BLOCK_GAP),
-                ..default()
-            },
-            ScrollPosition::default(),
-        ))
-        .with_children(|scroll| {
-            for block in &blocks {
-                spawn_block(scroll, block, font);
-            }
-        });
-        // the scrollbar: a thumb down the right edge
-        page.spawn((
-            HelpThumb,
-            Node {
-                position_type: PositionType::Absolute,
-                right: Val::Px(0.0),
-                width: Val::Px(MENU_SCROLLBAR_WIDTH),
-                ..default()
-            },
-            BackgroundColor(MENU_SCROLLBAR),
-        ));
+    spawn_scrolling(parent, extra, HELP_BLOCK_GAP, |scroll| {
+        for block in &blocks {
+            spawn_block(scroll, block, font);
+        }
     });
 }
 
 fn spawn_block(parent: &mut ChildSpawnerCommands, block: &Block, font: &UiFont) {
     match block {
         Block::Heading(level, spans) => {
-            let size = if *level == 1 { HELP_TITLE_SIZE } else { HELP_TEXT_SIZE };
-            spawn_text(parent, spans, font, size, MENU_HEADING, Node {
-                margin: UiRect::top(Val::Px(HELP_BLOCK_GAP)),
-                ..default()
-            });
+            let size = if *level == 1 {
+                HELP_TITLE_SIZE
+            } else {
+                HELP_TEXT_SIZE
+            };
+            spawn_text(
+                parent,
+                spans,
+                font,
+                size,
+                MENU_HEADING,
+                Node {
+                    margin: UiRect::top(Val::Px(HELP_BLOCK_GAP)),
+                    ..default()
+                },
+            );
         }
-        Block::Paragraph(spans) => spawn_text(parent, spans, font, HELP_TEXT_SIZE, MENU_TEXT, Node::default()),
+        Block::Paragraph(spans) => spawn_text(
+            parent,
+            spans,
+            font,
+            HELP_TEXT_SIZE,
+            MENU_TEXT,
+            Node::default(),
+        ),
         Block::ListItem(depth, marker, spans) => {
             parent
                 .spawn(Node {
@@ -210,11 +188,25 @@ fn spawn_block(parent: &mut ChildSpawnerCommands, block: &Block, font: &UiFont) 
                         italic: false,
                         code: false,
                     }];
-                    spawn_text(row, &marker, font, HELP_TEXT_SIZE, MENU_TEXT_DIM, Node::default());
-                    spawn_text(row, spans, font, HELP_TEXT_SIZE, MENU_TEXT, Node {
-                        flex_shrink: 1.0,
-                        ..default()
-                    });
+                    spawn_text(
+                        row,
+                        &marker,
+                        font,
+                        HELP_TEXT_SIZE,
+                        MENU_TEXT_DIM,
+                        Node::default(),
+                    );
+                    spawn_text(
+                        row,
+                        spans,
+                        font,
+                        HELP_TEXT_SIZE,
+                        MENU_TEXT,
+                        Node {
+                            flex_shrink: 1.0,
+                            ..default()
+                        },
+                    );
                 });
         }
         Block::Rule => {
@@ -243,7 +235,14 @@ fn spawn_block(parent: &mut ChildSpawnerCommands, block: &Block, font: &UiFont) 
                         italic: false,
                         code: true,
                     }];
-                    spawn_text(code_box, &text, font, HELP_TEXT_SIZE, MENU_CODE, Node::default());
+                    spawn_text(
+                        code_box,
+                        &text,
+                        font,
+                        HELP_TEXT_SIZE,
+                        MENU_CODE,
+                        Node::default(),
+                    );
                 });
         }
         Block::Table(rows) => {
@@ -260,7 +259,11 @@ fn spawn_block(parent: &mut ChildSpawnerCommands, block: &Block, font: &UiFont) 
                     for (row_index, row) in rows.iter().enumerate() {
                         for cell in row {
                             // the header row is headed like a heading
-                            let colour = if row_index == 0 { MENU_HEADING } else { MENU_TEXT };
+                            let colour = if row_index == 0 {
+                                MENU_HEADING
+                            } else {
+                                MENU_TEXT
+                            };
                             spawn_text(grid, cell, font, HELP_TEXT_SIZE, colour, Node::default());
                         }
                     }
@@ -306,36 +309,6 @@ fn spawn_text(
         });
 }
 
-/// The mouse wheel scrolls the page, and the thumb shows where you are
-pub fn scroll_help(
-    wheel: Res<AccumulatedMouseScroll>,
-    mut scroll: Query<(&mut ScrollPosition, &ComputedNode, &InheritedVisibility), With<HelpScroll>>,
-    mut thumb: Query<&mut Node, With<HelpThumb>>,
-) {
-    let Ok((mut position, computed, visible)) = scroll.single_mut() else {
-        return;
-    };
-    if !visible.get() {
-        return;
-    }
-    // sizes in logical pixels, like the scroll position
-    let scale = computed.inverse_scale_factor;
-    let view = computed.size.y * scale;
-    let content = computed.content_size.y * scale;
-    let max = (content - view).max(0.0);
-    position.0.y = (position.0.y - wheel.delta.y * HELP_SCROLL_SPEED).clamp(0.0, max);
-
-    if let Ok(mut thumb) = thumb.single_mut() {
-        if max <= 0.0 {
-            thumb.height = Val::Px(0.0);
-        } else {
-            let height = view * view / content;
-            thumb.height = Val::Px(height);
-            thumb.top = Val::Px(position.0.y / max * (view - height));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,7 +321,9 @@ mod tests {
     fn headings_paragraphs_and_styles() {
         let blocks = parse("# Title\n\nSome **bold** and `code`.\n\n---\n");
         assert!(matches!(&blocks[0], Block::Heading(1, spans) if plain(spans) == "Title"));
-        let Block::Paragraph(spans) = &blocks[1] else { panic!("{blocks:?}") };
+        let Block::Paragraph(spans) = &blocks[1] else {
+            panic!("{blocks:?}")
+        };
         assert_eq!(plain(spans), "Some bold and code.");
         assert!(spans.iter().any(|span| span.bold && span.text == "bold"));
         assert!(spans.iter().any(|span| span.code && span.text == "code"));
@@ -361,7 +336,9 @@ mod tests {
         let items: Vec<(usize, String, String)> = blocks
             .iter()
             .filter_map(|block| match block {
-                Block::ListItem(depth, marker, spans) => Some((*depth, marker.clone(), plain(spans))),
+                Block::ListItem(depth, marker, spans) => {
+                    Some((*depth, marker.clone(), plain(spans)))
+                }
                 _ => None,
             })
             .collect();
@@ -375,7 +352,9 @@ mod tests {
     #[test]
     fn tables_keep_rows_and_cells() {
         let blocks = parse("| A | B |\n|---|---|\n| 1 | 2 |\n");
-        let Block::Table(rows) = &blocks[0] else { panic!("{blocks:?}") };
+        let Block::Table(rows) = &blocks[0] else {
+            panic!("{blocks:?}")
+        };
         assert_eq!(rows.len(), 2);
         assert_eq!(plain(&rows[1][1]), "2");
     }

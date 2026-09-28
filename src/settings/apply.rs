@@ -6,9 +6,8 @@ use bevy::{
     light::{
         AtmosphereEnvironmentMapLight, CascadeShadowConfigBuilder, DirectionalLightShadowMap,
     },
-    post_process::{auto_exposure::AutoExposure, bloom::Bloom},
+    post_process::bloom::Bloom,
     prelude::*,
-    camera::Exposure,
     window::{PresentMode, PrimaryWindow},
 };
 use lightyear::prelude::MessageSender;
@@ -19,7 +18,7 @@ use crate::{
     sky::{config::*, logic::Sun},
 };
 
-/// Graphics: field of view, bloom, exposure, sky lighting, shadows, frame pacing
+/// Graphics: field of view, bloom, sky lighting, shadows, frame pacing
 /// and UI size. Runs only when the settings changed
 pub fn apply_graphics(
     settings: Res<Settings>,
@@ -46,17 +45,6 @@ pub fn apply_graphics(
         camera.insert(Bloom::NATURAL);
     } else {
         camera.remove::<Bloom>();
-    }
-    if graphics.auto_exposure {
-        camera.insert(AutoExposure {
-            range: EXPOSURE_RANGE,
-            speed_brighten: EXPOSURE_BRIGHTEN_SPEED,
-            speed_darken: EXPOSURE_DARKEN_SPEED,
-            ..default()
-        });
-    } else {
-        // a fixed exposure made for full daylight: nights are black
-        camera.remove::<AutoExposure>().insert(Exposure::SUNLIGHT);
     }
 
     // shadows: cascades, reach and sharpness (whether they're on at all is also

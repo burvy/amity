@@ -11,7 +11,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 
-use super::{config::*, font::UiFont, help};
+use super::{config::*, font::UiFont, help, settings};
 use crate::player::definition::PlayerInfo;
 
 /// Which page the menu's panel shows
@@ -113,12 +113,7 @@ pub fn spawn_pause_menu(mut cmds: Commands, font: Res<UiFont>) {
         })
         .with_children(|panel| {
             help::spawn_help(panel, &font, (PageOf(PausePage::Help), Visibility::Hidden));
-            panel.spawn((
-                PageOf(PausePage::Settings),
-                Text::new("Settings are coming next."),
-                text(MENU_BUTTON_SIZE / 2.0, MENU_TEXT),
-                Visibility::Hidden,
-            ));
+            settings::spawn_settings(panel, &font, (PageOf(PausePage::Settings), Visibility::Hidden));
         });
     });
 }
@@ -139,14 +134,16 @@ fn resume(info: &mut PlayerInfo, cursor: &mut CursorOptions) {
 }
 
 /// Esc: pauses; while paused, goes back from a page to the list, and from the
-/// list back to the game
+/// list back to the game. (Not while a key binding is waiting for a key: there
+/// Esc cancels that instead)
 pub fn escape(
     keys: Res<ButtonInput<KeyCode>>,
+    rebinding: Res<settings::Rebinding>,
     mut info: ResMut<PlayerInfo>,
     mut page: ResMut<PausePage>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
-    if !keys.just_pressed(KeyCode::Escape) {
+    if !keys.just_pressed(KeyCode::Escape) || rebinding.0.is_some() {
         return;
     }
     if !info.paused {
@@ -244,12 +241,13 @@ fn leave(exit: &mut MessageWriter<AppExit>) {
     exit.write(AppExit::Success);
 }
 
-/// Shows the menu while paused, and only the open page in its panel
+/// Shows the menu while paused, and only the open page in its panel (hidden
+/// pages are taken out of the layout too, so the open one gets all the room)
 pub fn show_menu(
     info: Res<PlayerInfo>,
     page: Res<PausePage>,
     mut menu: Single<&mut Visibility, (With<PauseMenu>, Without<PageOf>)>,
-    mut pages: Query<(&PageOf, &mut Visibility), Without<PauseMenu>>,
+    mut pages: Query<(&PageOf, &mut Visibility, &mut Node), Without<PauseMenu>>,
 ) {
     let shown = if info.paused {
         Visibility::Inherited
@@ -259,14 +257,17 @@ pub fn show_menu(
     if **menu != shown {
         **menu = shown;
     }
-    for (PageOf(of), mut visibility) in &mut pages {
-        let wanted = if *of == *page {
-            Visibility::Inherited
+    for (PageOf(of), mut visibility, mut node) in &mut pages {
+        let (wanted, display) = if *of == *page {
+            (Visibility::Inherited, Display::Flex)
         } else {
-            Visibility::Hidden
+            (Visibility::Hidden, Display::None)
         };
         if *visibility != wanted {
             *visibility = wanted;
+        }
+        if node.display != display {
+            node.display = display;
         }
     }
 }

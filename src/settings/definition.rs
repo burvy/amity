@@ -25,8 +25,6 @@ pub struct Graphics {
     pub sky_light: SkyLightQuality,
     /// A glow around bright light, like the sun
     pub bloom: bool,
-    /// Eyes adjusting to brightness. Off: a fixed daylight exposure (nights black)
-    pub auto_exposure: bool,
     pub frame_limit: FrameLimit,
     /// Size of all UI, 1.0 = as designed
     pub ui_scale: f32,
@@ -40,7 +38,6 @@ impl Default for Graphics {
             shadows: ShadowQuality::Medium,
             sky_light: SkyLightQuality::High,
             bloom: true,
-            auto_exposure: true,
             frame_limit: FrameLimit::VSync,
             ui_scale: 1.0,
         }

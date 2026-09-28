@@ -4,6 +4,7 @@ use amity_protocol::sky::{
     WorldClock,
 };
 use bevy::{
+    camera::Exposure,
     core_pipeline::tonemapping::Tonemapping,
     light::{atmosphere::ScatteringMedium, Atmosphere, SunDisk},
     pbr::AtmosphereSettings,
@@ -67,12 +68,16 @@ pub fn spawn_sky(mut cmds: Commands, mut media: ResMut<Assets<ScatteringMedium>>
 }
 
 /// Turns the player's camera into a physically based one: the atmosphere drawn
-/// as its sky, and a filmic response curve. The sky's lighting of the world,
-/// eyes that adapt to brightness, and bloom depend on the graphics settings, so
+/// as its sky, a fixed exposure, and a filmic response curve. The sky's
+/// lighting of the world and bloom depend on the graphics settings, so
 /// `settings/apply.rs` adds those
 pub fn setup_camera(camera: On<Add, MainPlayerCamera>, mut cmds: Commands) {
     cmds.entity(camera.entity)
-        .insert((AtmosphereSettings::default(), Tonemapping::AgX));
+        .insert((
+            AtmosphereSettings::default(),
+            Exposure { ev100: EXPOSURE_EV100 },
+            Tonemapping::AgX,
+        ));
 }
 
 /// Advances our time, and snaps to the server's whenever it arrives. Its updates

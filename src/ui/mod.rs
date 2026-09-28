@@ -1,10 +1,13 @@
-//! On-screen UI: the hotbar, the creative block picker, and the debug screen.
+//! On-screen UI: the hotbar and inventory, the creative block picker, the
+//! debug screen, and the pause menu.
 //!
 //! - `config.rs`: sizes and colours (placeholder styling, meant to be redesigned)
 //! - `font.rs`: the one font all UI text uses (swap in your own there)
 //! - `debug.rs`: the debug screen (F3)
 //! - `pause.rs`: the pause menu (Esc)
 //! - `help.rs`: the Help page, from `assets/help.md`
+//! - `settings.rs`: the Settings page (Graphics and Controls tabs)
+//! - `scroll.rs`: scrolling for the pause menu's pages
 //! - `inventory.rs`: the hotbar down the right edge, the inventory that slides
 //!   out beside it while Tab is held, and the item held on the cursor
 //! - `picker.rs`: the creative block picker, beside the open inventory
@@ -20,6 +23,8 @@ mod help;
 mod inventory;
 mod pause;
 mod picker;
+mod scroll;
+mod settings;
 
 pub struct UiPlugin;
 
@@ -29,10 +34,22 @@ impl Plugin for UiPlugin {
         app.add_plugins(FrameTimeDiagnosticsPlugin::default());
         app.init_resource::<font::UiFont>();
         app.init_resource::<pause::PausePage>();
+        app.init_resource::<settings::SettingsTab>();
+        app.init_resource::<settings::Rebinding>();
         app.add_systems(Startup, (debug::spawn_debug, pause::spawn_pause_menu));
         app.add_systems(
             Update,
-            (pause::escape, pause::click_menu, pause::show_menu, help::scroll_help).chain(),
+            (
+                pause::escape,
+                // before the clicks: a click that sets a binding is used up
+                settings::rebind,
+                pause::click_menu,
+                settings::click_settings,
+                pause::show_menu,
+                settings::update_settings,
+                scroll::scroll,
+            )
+                .chain(),
         );
         #[cfg(target_family = "wasm")]
         app.add_systems(Update, pause::pause_when_mouse_released);

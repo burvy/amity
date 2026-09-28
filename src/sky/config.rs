@@ -16,9 +16,8 @@ pub const FULL_MOON_LUX: f32 = 0.3;
 /// how far they reach is the player's Shadows setting (`settings`)
 pub const SHADOW_FIRST_CASCADE: f32 = 12.0;
 
-/// Auto-exposure, like eyes adjusting: the range of scene brightness it can
-/// adapt to (in stops, log2 of luminance: daylight ~13, moonlight ~-8), and how
-/// fast it adapts in stops per second
-pub const EXPOSURE_RANGE: std::ops::RangeInclusive<f32> = -12.0..=15.0;
-pub const EXPOSURE_BRIGHTEN_SPEED: f32 = 3.0;
-pub const EXPOSURE_DARKEN_SPEED: f32 = 1.0;
+/// The camera's exposure, fixed (in EV100, like a real camera's setting). 15 is
+/// made for full sunlight, so daylight looks right and nights are really dark:
+/// light there comes from light sources (flashlights, later). Lower is brighter,
+/// each 1 doubling it. No eye adjustment, on purpose
+pub const EXPOSURE_EV100: f32 = 15.0;
