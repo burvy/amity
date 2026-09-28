@@ -1,6 +1,6 @@
 //! Things in the world players can use
 
-use amity_protocol::player::{definition::PlayerMarker, step};
+use amity_protocol::player::{definition::PlayerMarker, movement};
 use bevy::prelude::*;
 
 mod logic;
@@ -13,7 +13,7 @@ impl Plugin for StuffPlugin {
         // after movement, so players interact from where they ended up this tick
         app.add_systems(
             FixedUpdate,
-            logic::server_interact.after(step::step_up::<With<PlayerMarker>>),
+            logic::server_interact.after(movement::player_motion::<With<PlayerMarker>>),
         );
     }
 }

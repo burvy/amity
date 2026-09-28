@@ -1,12 +1,15 @@
 use amity_protocol::player::{
-    config::{EYE_HEIGHT, PLAYER_LENGTH, PLAYER_RADIUS},
+    config::{EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH},
     definition::{PlayerBody, PlayerInputs, PlayerMarker},
 };
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use lightyear::{
     frame_interpolation::FrameInterpolate,
-    prelude::{input::native::InputMarker, *},
+    prelude::{
+        input::native::{ActionState, InputMarker},
+        *,
+    },
 };
 
 use super::definition::{MainPlayerCamera, PlayerInfo};
@@ -27,16 +30,37 @@ pub fn add_physics(
     }
 }
 
+/// Marks a player's visible model: a child of their body, so it can turn to
+/// face where they look while the body's box stays square to the world
+#[derive(Component)]
+pub struct PlayerModel;
+
 /// Insert player model onto player upon being newly predicted
 pub fn draw_players(
     mut cmds: Commands,
     players: Query<Entity, (Added<Predicted>, With<PlayerMarker>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for player in players.iter() {
-        cmds.entity(player).queue_apply_scene(bsn! {
-            Mesh3d(asset_value(Capsule3d::new(PLAYER_RADIUS, PLAYER_LENGTH)))
-            MeshMaterial3d::<StandardMaterial>(asset_value(Color::WHITE))
-        });
+        cmds.entity(player).insert(Visibility::default()).with_child((
+            PlayerModel,
+            Mesh3d(meshes.add(Cuboid::new(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH))),
+            MeshMaterial3d(materials.add(Color::WHITE)),
+        ));
+    }
+}
+
+/// Turns each player's model to the way they look (yaw only). Runs before
+/// transforms are handed to rendering
+pub fn turn_models(
+    mut models: Query<(&ChildOf, &mut Transform), With<PlayerModel>>,
+    players: Query<&ActionState<PlayerInputs>>,
+) {
+    for (parent, mut transform) in &mut models {
+        if let Ok(action) = players.get(parent.parent()) {
+            transform.rotation = Quat::from_rotation_y(action.0.look.x);
+        }
     }
 }
 

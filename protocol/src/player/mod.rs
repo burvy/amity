@@ -11,7 +11,6 @@ pub mod aim;
 pub mod config;
 pub mod definition;
 pub mod movement;
-pub mod step;
 
 pub struct PlayerProtocolPlugin;
 

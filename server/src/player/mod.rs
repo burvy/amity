@@ -2,7 +2,7 @@
 
 use amity_protocol::player::{
     definition::{PlayerInputs, PlayerMarker},
-    movement, step,
+    movement,
 };
 use bevy::prelude::*;
 use lightyear::input::server::{authorize_controlled_targets, InputValidationAppExt};
@@ -25,7 +25,6 @@ impl Plugin for PlayerPlugin {
             (
                 logic::clear_stale_input,
                 movement::player_motion::<With<PlayerMarker>>,
-                step::step_up::<With<PlayerMarker>>,
                 logic::keep_players_replicating,
             )
                 .chain(),

@@ -1,6 +1,6 @@
 //! Our player and the ones we see: input, camera, bodies, and the interact prompt
 
-use amity_protocol::player::{movement, step};
+use amity_protocol::player::movement;
 use avian3d::prelude::Position;
 use bevy::{prelude::*, transform::TransformSystems};
 use lightyear::{
@@ -49,7 +49,7 @@ impl Plugin for PlayerPlugin {
         app.add_plugins(FrameInterpolationPlugin::<Position>::default());
         app.add_systems(
             PostUpdate,
-            logic::camera_follow_player
+            (logic::camera_follow_player, logic::turn_models)
                 .after(RollbackSystems::VisualCorrection)
                 .before(TransformSystems::Propagate),
         );
@@ -64,13 +64,6 @@ impl Plugin for PlayerPlugin {
         );
 
         // Simulate players
-        app.add_systems(
-            FixedUpdate,
-            (
-                movement::player_motion::<With<Predicted>>,
-                step::step_up::<With<Predicted>>,
-            )
-                .chain(),
-        );
+        app.add_systems(FixedUpdate, movement::player_motion::<With<Predicted>>);
     }
 }

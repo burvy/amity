@@ -2,7 +2,7 @@ use avian3d::prelude::*;
 use bevy::{ecs::entity::MapEntities, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use super::config::{GROUND_TOLERANCE, PLAYER_HALF_HEIGHT, PLAYER_LENGTH, PLAYER_RADIUS};
+use super::config::{PLAYER_HEIGHT, PLAYER_WIDTH};
 
 /// Marker used to mark something as a player (no fields)
 /// This struct is bolted onto players as components, and thus must derive
@@ -49,34 +49,39 @@ impl MapEntities for PlayerInputs {
 }
 
 /// Shared player body definition to ensure similar simulation between
-/// client and server
+/// client and server.
+///
+/// The body is kinematic: physics never moves it or pushes it. Only
+/// `movement::player_motion` does, sweeping the box along its velocity and
+/// sliding along whatever it hits (avian's move-and-slide). So a player's whole
+/// state is their `Position` and `LinearVelocity`, which lightyear already
+/// rolls back, and the client predicts exactly what the server does.
+///
+/// The box is upright and never turns: the look direction lives only in the
+/// inputs. A turning box would swing its corners into walls.
 #[derive(Bundle)]
 pub struct PlayerBody {
     body: RigidBody,
     collider: Collider,
-    locked: LockedAxes,
-    ground_check: ShapeCaster,
-    friction: Friction,
-    /// Set to 0 by `movement::player_motion` while the world around the player
-    /// hasn't loaded, so they hang in place instead of falling
-    gravity: GravityScale,
+    /// Tells avian not to move the body by its velocity; movement does that
+    custom_integration: CustomPositionIntegration,
+    /// No early contacts with things the body is heading toward. Those would
+    /// shove props on the physics' own terms rather than movement's
+    margin: SpeculativeMargin,
 }
 
 impl Default for PlayerBody {
     fn default() -> Self {
         Self {
-            body: RigidBody::Dynamic,
-            collider: Collider::capsule(PLAYER_RADIUS, PLAYER_LENGTH),
-            locked: LockedAxes::ROTATION_LOCKED,
-            ground_check: ShapeCaster::new(
-                Collider::sphere(PLAYER_RADIUS * 0.9),
-                Vec3::ZERO,
-                Quat::IDENTITY,
-                Dir3::NEG_Y,
-            )
-            .with_max_distance(PLAYER_HALF_HEIGHT - PLAYER_RADIUS * 0.9 + GROUND_TOLERANCE),
-            friction: Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
-            gravity: GravityScale(1.0),
+            body: RigidBody::Kinematic,
+            collider: player_collider(),
+            custom_integration: CustomPositionIntegration,
+            margin: SpeculativeMargin(0.0),
         }
     }
+}
+
+/// The body's shape: an upright box around its centre
+pub fn player_collider() -> Collider {
+    Collider::cuboid(PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH)
 }
