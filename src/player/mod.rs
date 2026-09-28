@@ -1,8 +1,13 @@
 //! Our player and the ones we see: input, camera, bodies, and the interact prompt
 
 use amity_protocol::player::{movement, step};
-use bevy::prelude::*;
-use lightyear::{input::client::InputSystems, prelude::Predicted};
+use avian3d::prelude::Position;
+use bevy::{prelude::*, transform::TransformSystems};
+use lightyear::{
+    frame_interpolation::FrameInterpolationPlugin,
+    input::client::InputSystems,
+    prelude::{Predicted, RollbackSystems},
+};
 
 pub(crate) mod config;
 pub mod definition;
@@ -29,13 +34,24 @@ impl Plugin for PlayerPlugin {
             (
                 input::select_slot,
                 input::toggle_flight,
-                (input::rotate_player_resource, logic::camera_follow_player).chain(),
+                input::rotate_player_resource,
                 interact::client_interaction_checker,
                 interact::can_interact_prompt,
                 // players replicated to us get a body to simulate and a mesh to see
                 logic::add_physics,
                 logic::draw_players,
             ),
+        );
+
+        // Smooth players between fixed ticks. The camera follows the smoothed
+        // position, so it goes after interpolation (and rollback's visual
+        // correction), and before transforms are handed to rendering
+        app.add_plugins(FrameInterpolationPlugin::<Position>::default());
+        app.add_systems(
+            PostUpdate,
+            logic::camera_follow_player
+                .after(RollbackSystems::VisualCorrection)
+                .before(TransformSystems::Propagate),
         );
 
         app.add_observer(logic::detect_replicate_player);

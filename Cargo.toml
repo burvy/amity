@@ -45,6 +45,8 @@ lightyear = { version = "0.28.0", default-features = false, features = [
     "replication",
     "prediction",
     "interpolation",
+    # smooths predicted players between fixed ticks, for the frames in between
+    "frame_interpolation",
     "input_native",
     "avian3d",
 ]}

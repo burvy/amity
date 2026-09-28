@@ -4,7 +4,10 @@ use amity_protocol::player::{
 };
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use lightyear::prelude::{input::native::InputMarker, *};
+use lightyear::{
+    frame_interpolation::FrameInterpolate,
+    prelude::{input::native::InputMarker, *},
+};
 
 use super::definition::{MainPlayerCamera, PlayerInfo};
 
@@ -14,9 +17,13 @@ pub fn add_physics(
     players: Query<Entity, (Added<Predicted>, With<PlayerMarker>)>,
 ) {
     for player in players.iter() {
-        cmds.entity(player).insert(
+        cmds.entity(player).insert((
             PlayerBody::default(), // add ONCE
-        );
+            // players move 64 times a second, but frames come at any rate: show
+            // them one tick behind, blended between the last two ticks, so they
+            // glide instead of judder
+            FrameInterpolate::<Position>::default(),
+        ));
     }
 }
 
@@ -44,6 +51,8 @@ pub fn detect_replicate_our_player(our_player: On<Add, Controlled>, mut cmds: Co
         .insert(InputMarker::<PlayerInputs>::default());
 }
 
+/// Puts the camera at our player's eye. Runs after frame interpolation, so it
+/// reads the smoothed position rather than the last tick's
 pub fn camera_follow_player(
     mut camera: Single<&mut Transform, With<MainPlayerCamera>>,
     player: Single<&Position, With<Controlled>>,
