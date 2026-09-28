@@ -6,7 +6,10 @@ use amity_protocol::sky::{
 use bevy::{
     camera::Exposure,
     core_pipeline::tonemapping::Tonemapping,
-    light::{atmosphere::ScatteringMedium, Atmosphere, SunDisk},
+    light::{
+        atmosphere::{Falloff, PhaseFunction, ScatteringMedium, ScatteringTerm},
+        Atmosphere, SunDisk,
+    },
     pbr::AtmosphereSettings,
     prelude::*,
 };
@@ -41,9 +44,12 @@ pub struct Moon;
 
 /// The planet's atmosphere, and the sun and moon as lights
 pub fn spawn_sky(mut cmds: Commands, mut media: ResMut<Assets<ScatteringMedium>>) {
-    // Earth's air: blue sky, red sunsets, haze over distance. Its transform is
-    // the planet's centre, placed by default one earth radius below the origin
-    cmds.spawn(Atmosphere::earth(media.add(ScatteringMedium::default())));
+    // Earth's air: blue sky, red sunsets, and a haze near the ground that fades
+    // distant land. Its transform is the planet's centre, placed by default one
+    // earth radius below the origin, so the ground (sea level) is at y = 0
+    let mut atmosphere = Atmosphere::earth(Handle::default());
+    atmosphere.medium = media.add(air(atmosphere.outer_radius - atmosphere.inner_radius));
+    cmds.spawn(atmosphere);
     cmds.spawn((
         Sun,
         DirectionalLight {
@@ -67,6 +73,35 @@ pub fn spawn_sky(mut cmds: Commands, mut media: ResMut<Assets<ScatteringMedium>>
     ));
 }
 
+/// Earth's air (gas, fine dust high up, ozone), plus haze: particles near the
+/// ground, like the water and dust on a normal humid day. `depth` is how far the
+/// atmosphere reaches up from the ground (metres).
+///
+/// The haze is set by how far you can see through it: the distance at which
+/// something keeps 2% of its contrast is 3.912 divided by how much of the light
+/// the air stops per metre (Koschmieder's law). It scatters most of that light
+/// and absorbs the rest, and scatters blue a little more than red. Its density
+/// falls off exponentially with height
+fn air(depth: f32) -> ScatteringMedium {
+    let mut medium = ScatteringMedium::earth(ATMOSPHERE_HEIGHT_STEPS, 256);
+    let stopped = 3.912 / HAZE_VISIBILITY;
+    let scattered = stopped * HAZE_SCATTER_SHARE;
+    // relative to green light (550 nm): red (680 nm) scatters less, blue (440
+    // nm) more
+    let by_colour = Vec3::new(550.0f32 / 680.0, 1.0, 550.0 / 440.0).powf(HAZE_ANGSTROM);
+    medium.terms.push(ScatteringTerm {
+        absorption: Vec3::splat(stopped - scattered),
+        scattering: by_colour * scattered,
+        falloff: Falloff::Exponential {
+            scale: HAZE_SCALE_HEIGHT / depth,
+        },
+        phase: PhaseFunction::Mie {
+            asymmetry: HAZE_ASYMMETRY,
+        },
+    });
+    medium.with_label("air_with_haze")
+}
+
 /// Turns the player's camera into a physically based one: the atmosphere drawn
 /// as its sky, a fixed exposure, and a filmic response curve. The sky's
 /// lighting of the world and bloom depend on the graphics settings, so
@@ -74,7 +109,10 @@ pub fn spawn_sky(mut cmds: Commands, mut media: ResMut<Assets<ScatteringMedium>>
 pub fn setup_camera(camera: On<Add, MainPlayerCamera>, mut cmds: Commands) {
     cmds.entity(camera.entity)
         .insert((
-            AtmosphereSettings::default(),
+            AtmosphereSettings {
+                aerial_view_lut_max_distance: AERIAL_PERSPECTIVE_DISTANCE,
+                ..default()
+            },
             Exposure { ev100: EXPOSURE_EV100 },
             Tonemapping::AgX,
         ));
