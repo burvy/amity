@@ -168,12 +168,18 @@ fn spawn_slot(parent: &mut ChildSpawnerCommands, slot: usize, style: &SlotStyle)
         });
 }
 
-/// Pixels from the screen's right edge to the panel's right side, `out` of the
-/// way (0..1) from hidden (just off screen) to fully out (just left of the hotbar)
+/// Pixels across the slide-out columns (with the gap before the hotbar)
+fn panel_width() -> f32 {
+    INVENTORY_COLUMNS as f32 * (HOTBAR_SLOT_SIZE + HOTBAR_GAP)
+}
+
+/// Where the panel sits inside its clip, `out` of the way (0..1) from hidden to
+/// fully out, as pixels from the clip's right edge (the hotbar's left edge).
+/// Hidden, it's entirely past that edge: behind the hotbar, cut off by the clip.
+/// Out, it's one gap left of the hotbar
 fn panel_right(out: f32) -> f32 {
-    let width = INVENTORY_COLUMNS as f32 * (HOTBAR_SLOT_SIZE + HOTBAR_GAP);
-    let shown = HOTBAR_MARGIN + HOTBAR_SLOT_SIZE + HOTBAR_GAP;
-    let hidden = -width;
+    let hidden = -panel_width();
+    let shown = 0.0;
     hidden + (shown - hidden) * out
 }
 
@@ -203,14 +209,33 @@ pub fn spawn_inventory(
         ..default()
     };
 
-    // the panel first, so the hotbar is drawn over it as it slides out
-    cmds.spawn((InventoryPanel::default(), centred(panel_right(0.0))))
+    // The panel slides out from behind the hotbar and back in. It lives in a
+    // clip whose right edge is the hotbar's left edge: whatever of it is still
+    // "behind" the hotbar is past that edge, so it's cut off, not drawn over it
+    cmds.spawn(Node {
+        position_type: PositionType::Absolute,
+        right: Val::Px(HOTBAR_MARGIN + HOTBAR_SLOT_SIZE),
+        top: Val::Px(0.0),
+        bottom: Val::Px(0.0),
+        width: Val::Px(panel_width()),
+        overflow: Overflow::clip(),
+        ..default()
+    })
+    .with_children(|clip| {
+        clip.spawn((
+            InventoryPanel::default(),
+            Node {
+                padding: UiRect::right(Val::Px(HOTBAR_GAP)),
+                ..centred(panel_right(0.0))
+            },
+        ))
         .with_children(|panel| {
             // right to left: the column next to the hotbar holds slots 5..10
             for column in 0..INVENTORY_COLUMNS {
                 spawn_column(panel, HOTBAR_SLOTS + column * HOTBAR_SLOTS, &style);
             }
         });
+    });
     cmds.spawn(centred(HOTBAR_MARGIN)).with_children(|hotbar| {
         spawn_column(hotbar, 0, &style);
     });
