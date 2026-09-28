@@ -115,30 +115,35 @@ fn starting_hotbar() -> Inventory {
 
 /// One-off actions from clients: inventory clicks, the creative block picker,
 /// closing the inventory, and toggling flight (creative only).
-/// Runs in Update: lightyear clears received messages every frame
+/// Runs in Update: lightyear clears received messages every frame.
+///
+/// Each receiver only exists once that client has sent that kind of message
+/// (lightyear adds it on the first one), so both are optional: a client that has
+/// toggled flight but never touched the inventory still gets its toggle
 pub fn receive_actions(
     mut clients: Query<
         (
             Entity,
-            &mut MessageReceiver<InventoryAction>,
-            &mut MessageReceiver<ToggleFlight>,
+            Option<&mut MessageReceiver<InventoryAction>>,
+            Option<&mut MessageReceiver<ToggleFlight>>,
         ),
         With<Connected>,
     >,
     mut players: Query<(&ControlledBy, &GameMode, &mut Inventory, &mut Flying), With<PlayerMarker>>,
 ) {
-    for (client, mut actions, mut toggles) in &mut clients {
+    for (client, actions, toggles) in &mut clients {
+        let actions: Vec<InventoryAction> =
+            actions.map_or_else(Vec::new, |mut receiver| receiver.receive().collect());
+        let toggles = toggles.map_or(0, |mut receiver| receiver.receive().count());
+        // no player yet: what arrived is dropped
         let Some((_, mode, mut inventory, mut flying)) = players
             .iter_mut()
             .find(|(controlled, ..)| controlled.owner == client)
         else {
-            // no player yet: drop what arrived
-            actions.receive().for_each(drop);
-            toggles.receive().for_each(drop);
             continue;
         };
         let creative = *mode == GameMode::Creative;
-        for action in actions.receive() {
+        for action in actions {
             match action {
                 InventoryAction::Click { slot, click } => inventory.click(slot, click),
                 InventoryAction::Pick { item } => {
@@ -152,7 +157,7 @@ pub fn receive_actions(
                 InventoryAction::Close => inventory.put_back_cursor(),
             }
         }
-        for ToggleFlight in toggles.receive() {
+        for _ in 0..toggles {
             if creative {
                 flying.0 = !flying.0;
             }

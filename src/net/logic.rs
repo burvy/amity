@@ -6,7 +6,7 @@ use lightyear::{
     webtransport::client::WebTransportClientIo,
 };
 
-use super::config::{CLIENT_ADDR, CLIENT_TIMEOUT_SECS, JITTER_MARGIN};
+use super::config::{CLIENT_ADDR, CLIENT_TIMEOUT_SECS, JITTER_MARGIN, MAX_ROLLBACK_TICKS};
 
 /// Handles web handshake and creating a connection to the server
 pub fn connect(mut cmds: Commands) -> Result {
@@ -47,8 +47,10 @@ pub fn connect(mut cmds: Commands) -> Result {
 /// Turns on prediction, and sets how far ahead of the server our inputs run.
 /// Both are app-wide (there's one local timeline), so they're resources
 pub fn prediction_resources() -> (PredictionManager, InputTimelineConfig) {
+    let mut prediction = PredictionManager::default();
+    prediction.rollback_policy.max_rollback_ticks = MAX_ROLLBACK_TICKS;
     (
-        PredictionManager::default(),
+        prediction,
         InputTimelineConfig::default().with_sync_config(SyncConfig {
             jitter_margin: JITTER_MARGIN,
             ..default()

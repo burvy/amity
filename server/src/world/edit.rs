@@ -42,10 +42,12 @@ pub fn receive_edits(
         ),
         With<PlayerMarker>,
     >,
+    // the receiver only exists once that client has sent an edit (lightyear
+    // adds it on the first one), but every client gets everyone's changes
     mut clients: Query<
         (
             Entity,
-            &mut MessageReceiver<EditBlock>,
+            Option<&mut MessageReceiver<EditBlock>>,
             &mut MessageSender<BlockChanged>,
             &ChunkView,
         ),
@@ -55,7 +57,10 @@ pub fn receive_edits(
     mut sky: ResMut<SkyHeights>,
 ) {
     let mut accepted = Vec::new();
-    for (client, mut receiver, mut sender, _) in &mut clients {
+    for (client, receiver, mut sender, _) in &mut clients {
+        let Some(mut receiver) = receiver else {
+            continue;
+        };
         let Some((position, _, mode, mut inventory, action)) = players
             .iter_mut()
             .find(|(_, controlled, ..)| controlled.owner == client)
