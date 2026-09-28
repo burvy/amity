@@ -32,6 +32,10 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         // the debug screen's frame rate
         app.add_plugins(FrameTimeDiagnosticsPlugin::default());
+        // the debug screen's GPU time per render pass (native: the browser
+        // gives no GPU timings)
+        #[cfg(not(target_family = "wasm"))]
+        app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin);
         app.init_resource::<font::UiFont>();
         app.init_resource::<pause::PausePage>();
         app.init_resource::<settings::SettingsTab>();

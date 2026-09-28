@@ -6,19 +6,20 @@ use bevy::{
     light::{
         AtmosphereEnvironmentMapLight, CascadeShadowConfigBuilder, DirectionalLightShadowMap,
     },
+    anti_alias::{fxaa::Fxaa, smaa::Smaa},
     post_process::bloom::Bloom,
     prelude::*,
     window::{PresentMode, PrimaryWindow},
 };
 use lightyear::prelude::MessageSender;
 
-use super::definition::Settings;
+use super::definition::{AntiAliasing, Settings};
 use crate::{
     player::definition::MainPlayerCamera,
     sky::{config::*, logic::Sun},
 };
 
-/// Graphics: field of view, bloom, sky lighting, shadows, frame pacing
+/// Graphics: field of view, anti-aliasing, bloom, sky lighting, shadows, frame pacing
 /// and UI size. Runs only when the settings changed
 pub fn apply_graphics(
     settings: Res<Settings>,
@@ -41,6 +42,23 @@ pub fn apply_graphics(
         size: UVec2::splat(graphics.sky_light.resolution()),
         ..default()
     });
+    // one kind of anti-aliasing at a time (MSAA is the camera's sample count)
+    camera.remove::<(Fxaa, Smaa)>();
+    let msaa = if graphics.anti_aliasing == AntiAliasing::Msaa {
+        Msaa::Sample4
+    } else {
+        Msaa::Off
+    };
+    camera.insert(msaa);
+    match graphics.anti_aliasing {
+        AntiAliasing::Fxaa => {
+            camera.insert(Fxaa::default());
+        }
+        AntiAliasing::Smaa => {
+            camera.insert(Smaa::default());
+        }
+        AntiAliasing::Off | AntiAliasing::Msaa => {}
+    }
     if graphics.bloom {
         camera.insert(Bloom::NATURAL);
     } else {

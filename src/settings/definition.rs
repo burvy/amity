@@ -19,8 +19,13 @@ pub struct Settings {
 pub struct Graphics {
     /// Chunks (16 m each) loaded around you, sideways. The server caps it
     pub render_distance: u8,
+    /// Share of the screen's resolution the world is drawn at, 1.0 = full.
+    /// Lower is faster (0.75 is about half the pixels) and softer. The UI stays
+    /// sharp either way
+    pub render_scale: f32,
     /// Vertical field of view, degrees
     pub fov: f32,
+    pub anti_aliasing: AntiAliasing,
     pub shadows: ShadowQuality,
     pub sky_light: SkyLightQuality,
     /// A glow around bright light, like the sun
@@ -34,12 +39,37 @@ impl Default for Graphics {
     fn default() -> Self {
         Self {
             render_distance: 8,
+            render_scale: 1.0,
             fov: 70.0,
+            anti_aliasing: AntiAliasing::Fxaa,
             shadows: ShadowQuality::Medium,
             sky_light: SkyLightQuality::High,
             bloom: true,
             frame_limit: FrameLimit::VSync,
             ui_scale: 1.0,
+        }
+    }
+}
+
+/// Smoothing jagged edges. Cheapest to dearest: FXAA (a blur along edges),
+/// SMAA (sharper), MSAA (draws edges 4 times over: costly on weak GPUs)
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum AntiAliasing {
+    Off,
+    Fxaa,
+    Smaa,
+    Msaa,
+}
+
+impl AntiAliasing {
+    pub const ALL: [Self; 4] = [Self::Off, Self::Fxaa, Self::Smaa, Self::Msaa];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::Fxaa => "FXAA",
+            Self::Smaa => "SMAA",
+            Self::Msaa => "MSAA 4x",
         }
     }
 }

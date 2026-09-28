@@ -13,7 +13,8 @@ use super::{config::*, font::UiFont, pause::PausePage, scroll::spawn_scrolling};
 use crate::{
     player::definition::PlayerInfo,
     settings::definition::{
-        Action, Binding, Controls, FrameLimit, Graphics, Settings, ShadowQuality, SkyLightQuality,
+        Action, AntiAliasing, Binding, Controls, FrameLimit, Graphics, Settings, ShadowQuality,
+        SkyLightQuality,
     },
 };
 
@@ -45,7 +46,9 @@ pub struct Rebinding(pub Option<Action>);
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Setting {
     RenderDistance,
+    RenderScale,
     Fov,
+    AntiAliasing,
     Shadows,
     SkyLight,
     Bloom,
@@ -66,9 +69,11 @@ enum Kind {
 }
 
 impl Setting {
-    const GRAPHICS: [Self; 7] = [
+    const GRAPHICS: [Self; 9] = [
         Self::RenderDistance,
+        Self::RenderScale,
         Self::Fov,
+        Self::AntiAliasing,
         Self::Shadows,
         Self::SkyLight,
         Self::Bloom,
@@ -80,7 +85,9 @@ impl Setting {
     fn label(self) -> &'static str {
         match self {
             Self::RenderDistance => "Render distance",
+            Self::RenderScale => "Render scale",
             Self::Fov => "Field of view",
+            Self::AntiAliasing => "Anti-aliasing",
             Self::Shadows => "Shadows",
             Self::SkyLight => "Sky lighting",
             Self::Bloom => "Bloom",
@@ -97,7 +104,12 @@ impl Setting {
             Self::RenderDistance => slider(RENDER_DISTANCE_RANGE, 1.0),
             Self::Fov => slider(FOV_RANGE, 1.0),
             Self::Sensitivity => slider(SENSITIVITY_RANGE, 0.05),
-            Self::Shadows | Self::SkyLight | Self::FrameLimit | Self::UiScale => Kind::Chooser,
+            Self::RenderScale
+            | Self::AntiAliasing
+            | Self::Shadows
+            | Self::SkyLight
+            | Self::FrameLimit
+            | Self::UiScale => Kind::Chooser,
             Self::Bloom | Self::InvertY => Kind::Toggle,
         }
     }
@@ -134,6 +146,12 @@ impl Setting {
                 graphics.frame_limit = step(&FrameLimit::ALL, graphics.frame_limit, by)
             }
             Self::UiScale => graphics.ui_scale = step(&UI_SCALES, graphics.ui_scale, by),
+            Self::RenderScale => {
+                graphics.render_scale = step(&RENDER_SCALES, graphics.render_scale, by)
+            }
+            Self::AntiAliasing => {
+                graphics.anti_aliasing = step(&AntiAliasing::ALL, graphics.anti_aliasing, by)
+            }
             Self::Bloom => graphics.bloom = !graphics.bloom,
             Self::InvertY => settings.controls.invert_y = !settings.controls.invert_y,
             _ => {}
@@ -150,7 +168,9 @@ impl Setting {
                 graphics.render_distance,
                 graphics.render_distance as u32 * 16
             ),
+            Self::RenderScale => format!("{:.0}%", graphics.render_scale * 100.0),
             Self::Fov => format!("{:.0} degrees", graphics.fov),
+            Self::AntiAliasing => graphics.anti_aliasing.label().into(),
             Self::Shadows => format!("{:?}", graphics.shadows),
             Self::SkyLight => format!("{:?}", graphics.sky_light),
             Self::Bloom => on_off(graphics.bloom),

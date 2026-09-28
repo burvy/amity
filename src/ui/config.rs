@@ -95,6 +95,9 @@ pub const SETTINGS_CONFLICT: Color = Color::srgb(1.0, 0.4, 0.35);
 pub const RENDER_DISTANCE_RANGE: (f32, f32) = (2.0, 8.0);
 pub const FOV_RANGE: (f32, f32) = (50.0, 110.0);
 pub const SENSITIVITY_RANGE: (f32, f32) = (0.1, 3.0);
+/// Render scales to choose from: the share of the screen's resolution the
+/// world is drawn at
+pub const RENDER_SCALES: [f32; 5] = [0.5, 0.67, 0.75, 0.85, 1.0];
 /// UI sizes to choose from. A list rather than a slider: resizing the UI while
 /// dragging would move the slider out from under the mouse
 pub const UI_SCALES: [f32; 5] = [0.75, 1.0, 1.25, 1.5, 2.0];

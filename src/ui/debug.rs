@@ -1,5 +1,5 @@
 //! The F3 debug screen: frame rate, where you are and what you're looking at,
-//! chunks, connection, and the time and sky
+//! chunks, connection, the time and sky, and what the GPU spends its time on
 
 use std::f64::consts::TAU;
 
@@ -36,6 +36,9 @@ pub struct DebugText;
 /// Seconds between refreshes: rebuilding the text every frame costs more than
 /// it's worth, and numbers changing 60 times a second can't be read anyway
 const REFRESH_SECS: f32 = 0.25;
+
+/// How many of the slowest render passes to list
+const GPU_PASSES_SHOWN: usize = 8;
 
 pub fn spawn_debug(mut cmds: Commands, font: Res<UiFont>) {
     cmds.spawn((
@@ -179,6 +182,27 @@ pub fn update_debug(
             "Moon {:.0}% lit, {waxing}",
             moon_illumination(days) * 100.0
         ));
+    }
+
+    // GPU time per render pass (shadows, terrain, sky...), slowest first. A
+    // pass inside another is listed as `outer/inner`, and counted in both
+    let mut passes: Vec<(&str, f64)> = diagnostics
+        .iter()
+        .filter_map(|diagnostic| {
+            let name = diagnostic
+                .path()
+                .as_str()
+                .strip_prefix("render/")?
+                .strip_suffix("/elapsed_gpu")?;
+            Some((name, diagnostic.smoothed()?))
+        })
+        .collect();
+    if !passes.is_empty() {
+        passes.sort_by(|a, b| b.1.total_cmp(&a.1));
+        lines.push("GPU ms, slowest passes:".into());
+        for (name, ms) in passes.iter().take(GPU_PASSES_SHOWN) {
+            lines.push(format!("  {ms:5.2}  {name}"));
+        }
     }
 
     let joined = lines.join("\n");
