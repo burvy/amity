@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use bevy::prelude::*;
+use bevy::{light::ShadowFilteringMethod, prelude::*};
 use serde::{Deserialize, Serialize};
 
 #[derive(Resource, Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
@@ -86,13 +86,25 @@ pub enum ShadowQuality {
 impl ShadowQuality {
     pub const ALL: [Self; 4] = [Self::Off, Self::Low, Self::Medium, Self::High];
 
-    /// (cascades, metres they reach, shadow map pixels per side)
+    /// (cascades, metres they reach, shadow map pixels per side). Each
+    /// cascade draws the terrain once more every frame, so cascades cost the
+    /// most; the first one (the sharpest) covers only the nearest few metres,
+    /// so 2048 pixels is already sharp there
     pub fn cascades(self) -> Option<(usize, f32, usize)> {
         match self {
             Self::Off => None,
-            Self::Low => Some((2, 48.0, 1024)),
-            Self::Medium => Some((3, 96.0, 2048)),
-            Self::High => Some((4, 160.0, 4096)),
+            Self::Low => Some((1, 16.0, 128)),
+            Self::Medium => Some((2, 64.0, 1024)),
+            Self::High => Some((3, 128.0, 2048)),
+        }
+    }
+
+    /// Softening shadow edges: High blurs them over many samples (soft, and
+    /// dearer per pixel); the rest use the GPU's built-in 2x2 blend
+    pub fn filtering(self) -> ShadowFilteringMethod {
+        match self {
+            Self::High => ShadowFilteringMethod::Gaussian,
+            _ => ShadowFilteringMethod::Hardware2x2,
         }
     }
 }
@@ -127,7 +139,13 @@ pub enum FrameLimit {
 }
 
 impl FrameLimit {
-    pub const ALL: [Self; 5] = [Self::VSync, Self::Fps30, Self::Fps60, Self::Fps120, Self::Unlimited];
+    pub const ALL: [Self; 5] = [
+        Self::VSync,
+        Self::Fps30,
+        Self::Fps60,
+        Self::Fps120,
+        Self::Unlimited,
+    ];
 
     /// The frame rate cap, if it's a number
     pub fn fps(self) -> Option<f64> {
@@ -227,7 +245,13 @@ impl Action {
     ];
 
     /// The hotbar slot keys, in slot order
-    pub const SLOTS: [Action; 5] = [Self::Slot1, Self::Slot2, Self::Slot3, Self::Slot4, Self::Slot5];
+    pub const SLOTS: [Action; 5] = [
+        Self::Slot1,
+        Self::Slot2,
+        Self::Slot3,
+        Self::Slot4,
+        Self::Slot5,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -297,6 +321,9 @@ mod tests {
         let settings: Settings = ron::from_str("(graphics: (fov: 100.0))").unwrap();
         assert_eq!(settings.graphics.fov, 100.0);
         assert_eq!(settings.graphics.render_distance, 8);
-        assert_eq!(settings.controls.binding(Action::Jump), Action::Jump.default_binding());
+        assert_eq!(
+            settings.controls.binding(Action::Jump),
+            Action::Jump.default_binding()
+        );
     }
 }

@@ -9,6 +9,7 @@ use amity_protocol::world::{
     config::CHUNK_SIZE,
 };
 use bevy::{
+    light::NotShadowCaster,
     prelude::*,
     tasks::{futures::check_ready, AsyncComputeTaskPool, Task},
 };
@@ -147,6 +148,9 @@ pub fn finish_mesh_tasks(
                     .spawn((
                         Mesh3d(meshes.add(fluid)),
                         MeshMaterial3d(materials.fluid.clone()),
+                        // water lets light through: a shadow from it would be
+                        // wrong, and costs a draw in every shadow pass
+                        NotShadowCaster,
                         ChildOf(chunk),
                     ))
                     .id();

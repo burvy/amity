@@ -42,6 +42,8 @@ pub fn apply_graphics(
         size: UVec2::splat(graphics.sky_light.resolution()),
         ..default()
     });
+    camera.insert(graphics.shadows.filtering());
+
     // one kind of anti-aliasing at a time (MSAA is the camera's sample count)
     camera.remove::<(Fxaa, Smaa)>();
     let msaa = if graphics.anti_aliasing == AntiAliasing::Msaa {
