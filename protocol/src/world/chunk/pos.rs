@@ -44,6 +44,15 @@ impl ChunkIndex {
     pub fn contains(&self, pos: ChunkPos) -> bool {
         self.0.contains_key(&pos.0)
     }
+
+    /// How many chunks are loaded
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 pub fn index_chunk(add: On<Add, ChunkPos>, chunks: Query<&ChunkPos>, mut index: ResMut<ChunkIndex>) {

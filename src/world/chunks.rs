@@ -25,6 +25,11 @@ impl IncomingChunks {
     pub fn contains(&self, pos: ChunkPos) -> bool {
         self.0.contains_key(&pos.0)
     }
+
+    /// How many chunks are still having their collider built
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 /// Starts building colliders for chunks sent by the server. A chunk that's

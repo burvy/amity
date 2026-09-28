@@ -14,10 +14,15 @@ pub const FULL_MOON_LUX: f32 = 0.3;
 
 /// Sun shadows: how far from the camera they reach (metres), and how many
 /// cascades (more gives sharper shadows near the camera, at some GPU cost)
-pub const SHADOW_DISTANCE: f32 = 160.0;
-pub const SHADOW_CASCADES: usize = 4;
+pub const SHADOW_DISTANCE: f32 = 96.0;
+pub const SHADOW_CASCADES: usize = 3;
 /// Metres covered by the first, sharpest cascade
 pub const SHADOW_FIRST_CASCADE: f32 = 12.0;
+
+/// Pixels along each side of the cubemap the sky is rendered into to light the
+/// world (ambient light and reflections), redone every frame. Sky light is soft,
+/// so a small one looks the same and costs far less than Bevy's default 512
+pub const SKY_LIGHT_RESOLUTION: u32 = 128;
 
 /// Auto-exposure, like eyes adjusting: the range of scene brightness it can
 /// adapt to (in stops, log2 of luminance: daylight ~13, moonlight ~-8), and how

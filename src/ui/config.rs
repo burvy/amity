@@ -24,3 +24,9 @@ pub const PICKER_GAP: f32 = 6.0;
 pub const PICKER_DIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.6);
 pub const PICKER_SLOT: Color = Color::srgba(1.0, 1.0, 1.0, 0.08);
 pub const PICKER_SLOT_HOVERED: Color = Color::srgba(1.0, 1.0, 1.0, 0.25);
+
+/// Debug screen (F3): text in the top-left corner on a dark box
+pub const DEBUG_FONT_SIZE: f32 = 14.0;
+pub const DEBUG_MARGIN: f32 = 8.0;
+pub const DEBUG_PADDING: f32 = 6.0;
+pub const DEBUG_BACKGROUND: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);

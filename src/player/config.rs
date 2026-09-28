@@ -17,6 +17,8 @@ pub const KEY_SPRINT: [KeyCode; 2] = [KeyCode::ShiftLeft, KeyCode::ShiftRight];
 /// Crouch; while flying, down
 pub const KEY_CROUCH: KeyCode = KeyCode::KeyC;
 pub const KEY_INTERACT: KeyCode = KeyCode::KeyE;
+/// Shows the debug screen (frame rate, position, chunks, time...)
+pub const KEY_DEBUG: KeyCode = KeyCode::F3;
 /// Opens the creative block picker
 pub const KEY_PICKER: KeyCode = KeyCode::Tab;
 /// Selects hotbar slots 1 to 5

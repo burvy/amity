@@ -13,7 +13,7 @@ use bevy::{
 };
 use lightyear::prelude::Controlled;
 
-use super::config::*;
+use super::{config::*, font::UiFont};
 use crate::{
     player::definition::PlayerInfo,
     world::meshing::{material::BlockAtlas, textures::item_tile},
@@ -52,7 +52,12 @@ fn ui_image(images: &mut Assets<Image>, png: &[u8]) -> Handle<Image> {
 }
 
 /// Builds the empty hotbar once the block atlas (for icons) exists
-pub fn spawn_hotbar(mut cmds: Commands, atlas: Res<BlockAtlas>, mut images: ResMut<Assets<Image>>) {
+pub fn spawn_hotbar(
+    mut cmds: Commands,
+    atlas: Res<BlockAtlas>,
+    font: Res<UiFont>,
+    mut images: ResMut<Assets<Image>>,
+) {
     let slot_image = ui_image(&mut images, SLOT_IMAGE);
     let outline_image = ui_image(&mut images, OUTLINE_IMAGE);
     cmds.spawn(Node {
@@ -100,6 +105,7 @@ pub fn spawn_hotbar(mut cmds: Commands, atlas: Res<BlockAtlas>, mut images: ResM
                         HotbarCount(slot),
                         Text::new(""),
                         TextFont {
+                            font: font.0.clone().into(),
                             font_size: FontSize::Px(HOTBAR_COUNT_SIZE),
                             ..default()
                         },

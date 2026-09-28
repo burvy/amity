@@ -3,6 +3,7 @@ use std::f32::consts::FRAC_PI_2;
 use bevy::prelude::*;
 
 use super::config::SENSITIVITY;
+use crate::ui::font::UiFont;
 
 /// Resource to store client-side player info
 #[derive(Resource, Default)]
@@ -41,11 +42,12 @@ pub fn spawn_camera(mut cmds: Commands) {
 #[derive(Component)]
 pub struct InteractionPrompt;
 
-pub fn spawn_interact_prompt(mut cmds: Commands) {
+pub fn spawn_interact_prompt(mut cmds: Commands, font: Res<UiFont>) {
     cmds.spawn((
         InteractionPrompt,
         Text::new(format!("Press {} to interact", "E")), // TODO: configurable inputs
         TextFont {
+            font: font.0.clone().into(),
             font_size: FontSize::Px(20.0),
             ..default()
         },

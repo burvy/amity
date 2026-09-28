@@ -13,7 +13,7 @@ use super::ReceiveWorld;
 pub(crate) mod material;
 mod mesher;
 mod padded;
-mod tasks;
+pub(crate) mod tasks;
 pub(crate) mod textures;
 
 pub struct MeshingPlugin;

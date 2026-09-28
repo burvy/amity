@@ -4,7 +4,7 @@
 use bevy::prelude::*;
 use lightyear::core::timeline::is_in_rollback;
 
-mod chunks;
+pub(crate) mod chunks;
 mod edit;
 pub(crate) mod meshing;
 

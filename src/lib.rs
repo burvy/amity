@@ -4,7 +4,7 @@ mod net;
 mod player;
 mod sky;
 mod stuff;
-mod ui;
+pub(crate) mod ui;
 mod world;
 
 // This section below allows the game to render on the web
@@ -46,12 +46,12 @@ impl Plugin for MainPlugin {
 
         // dev-local only. EguiPlugin must come first - the inspector asserts
         // on it at startup rather than pulling it in itself.
-        // Hidden until F3: it walks every entity each frame, and every chunk is one
+        // Hidden until F4: it walks every entity each frame, and every chunk is one
         #[cfg(feature = "dev-local")]
         app.add_plugins((
             bevy_inspector_egui::bevy_egui::EguiPlugin::default(),
             bevy_inspector_egui::quick::WorldInspectorPlugin::new().run_if(
-                bevy::input::common_conditions::input_toggle_active(false, KeyCode::F3),
+                bevy::input::common_conditions::input_toggle_active(false, KeyCode::F4),
             ),
         ));
     }

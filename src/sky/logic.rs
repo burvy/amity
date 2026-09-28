@@ -25,6 +25,14 @@ pub struct SkyTime {
     synced: bool,
 }
 
+impl SkyTime {
+    /// Days since 1 January of year 0 (see `WorldClock`), once the server's time
+    /// has arrived
+    pub fn days(&self) -> Option<f64> {
+        self.synced.then_some(self.days)
+    }
+}
+
 #[derive(Component)]
 pub struct Sun;
 
@@ -72,7 +80,10 @@ pub fn spawn_sky(mut cmds: Commands, mut media: ResMut<Assets<ScatteringMedium>>
 pub fn setup_camera(camera: On<Add, MainPlayerCamera>, mut cmds: Commands) {
     cmds.entity(camera.entity).insert((
         AtmosphereSettings::default(),
-        AtmosphereEnvironmentMapLight::default(),
+        AtmosphereEnvironmentMapLight {
+            size: UVec2::splat(SKY_LIGHT_RESOLUTION),
+            ..default()
+        },
         AutoExposure {
             range: EXPOSURE_RANGE,
             speed_brighten: EXPOSURE_BRIGHTEN_SPEED,
