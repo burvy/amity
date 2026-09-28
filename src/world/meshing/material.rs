@@ -1,6 +1,6 @@
 //! The material every chunk is drawn with: bevy's standard lit material, plus
 //! a small shader (`block.wgsl`) that repeats each block's texture across the
-//! mesher's merged rectangles
+//! mesher's merged rectangles, and applies sky light and horizon shadows
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -12,6 +12,13 @@ use bevy::{
 };
 
 use super::textures::{atlas, tile_inset, tile_size, ATLAS};
+use crate::world::{
+    horizon::{
+        config::{CELL_BLOCKS, MAP_CELLS, SOFTNESS_DEG},
+        logic::HorizonMap,
+    },
+};
+use amity_protocol::world::config::BLOCK_SIZE;
 
 /// The block shader, embedded (see `MeshingPlugin`)
 const SHADER: &str = "embedded://amity/world/meshing/block.wgsl";
@@ -19,19 +26,31 @@ const SHADER: &str = "embedded://amity/world/meshing/block.wgsl";
 /// The standard material, drawn through the block shader
 pub type BlockMaterial = ExtendedMaterial<StandardMaterial, BlockTiling>;
 
-/// What the block shader needs to find a block's pixels in the atlas
+/// What the block shader needs besides the standard material: where a block's
+/// pixels are in the atlas, and the horizon map (`world/horizon`)
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct BlockTiling {
     /// xy: a tile's size in atlas UV. z: how far in from a tile's edges to
     /// sample, as a share of the tile. w: unused
     #[uniform(100)]
     tiling: Vec4,
+    /// how high the skyline is around each cell, in 8 directions
+    #[texture(101, dimension = "2d_array")]
+    #[sampler(102)]
+    horizon: Handle<Image>,
+    /// x: 1 / the map's width in metres (world position to map UV). y: how
+    /// far light fades as it sets behind the skyline, in radians. zw: unused
+    #[uniform(103)]
+    horizon_params: Vec4,
 }
 
-impl Default for BlockTiling {
-    fn default() -> Self {
+impl BlockTiling {
+    fn new(horizon: Handle<Image>) -> Self {
+        let map_metres = (MAP_CELLS * CELL_BLOCKS) as f32 * BLOCK_SIZE;
         Self {
             tiling: tile_size().extend(tile_inset()).extend(0.0),
+            horizon,
+            horizon_params: Vec4::new(1.0 / map_metres, SOFTNESS_DEG.to_radians(), 0.0, 0.0),
         }
     }
 }
@@ -63,6 +82,7 @@ pub fn init_chunk_material(
     mut mats: ResMut<Assets<BlockMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    horizon: Res<HorizonMap>,
 ) {
     // nearest sampling keeps the pixel art crisp instead of blurring it
     let atlas = Image::from_buffer(
@@ -87,7 +107,7 @@ pub fn init_chunk_material(
     });
     let block = |base: StandardMaterial| BlockMaterial {
         base,
-        extension: BlockTiling::default(),
+        extension: BlockTiling::new(horizon.image.clone()),
     };
     cmds.insert_resource(ChunkMaterials {
         solid: mats.add(block(StandardMaterial {
