@@ -6,11 +6,12 @@ use bevy::{prelude::*, transform::TransformSystems};
 use lightyear::{
     frame_interpolation::FrameInterpolationPlugin,
     input::client::InputSystems,
-    prelude::{Predicted, RollbackSystems},
+    prelude::{is_in_rollback, Predicted, RollbackSystems},
 };
 
 pub(crate) mod config;
 pub mod definition;
+mod glide;
 mod input;
 mod interact;
 mod logic;
@@ -49,7 +50,11 @@ impl Plugin for PlayerPlugin {
         app.add_plugins(FrameInterpolationPlugin::<Position>::default());
         app.add_systems(
             PostUpdate,
-            (logic::camera_follow_player, logic::turn_models)
+            (
+                glide::glide_steps,
+                (logic::camera_follow_player, logic::pose_models),
+            )
+                .chain()
                 .after(RollbackSystems::VisualCorrection)
                 .before(TransformSystems::Propagate),
         );
@@ -65,5 +70,11 @@ impl Plugin for PlayerPlugin {
 
         // Simulate players
         app.add_systems(FixedUpdate, movement::player_motion::<With<Predicted>>);
+        // count each tick's steps for smoothing, but not the ticks lightyear
+        // replays to correct a prediction: those were counted the first time
+        app.add_systems(
+            FixedPostUpdate,
+            glide::record_steps.run_if(not(is_in_rollback)),
+        );
     }
 }

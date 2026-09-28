@@ -1,6 +1,7 @@
 use amity_protocol::player::{
     config::{EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH},
     definition::{PlayerBody, PlayerInputs, PlayerMarker},
+    movement::Stepped,
 };
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -12,7 +13,10 @@ use lightyear::{
     },
 };
 
-use super::definition::{MainPlayerCamera, PlayerInfo};
+use super::{
+    definition::{MainPlayerCamera, PlayerInfo},
+    glide::StepGlide,
+};
 
 /// Insert physics onto player upon being newly predicted
 pub fn add_physics(
@@ -26,6 +30,9 @@ pub fn add_physics(
             // them one tick behind, blended between the last two ticks, so they
             // glide instead of judder
             FrameInterpolate::<Position>::default(),
+            // steps up and down, smoothed for the camera and model
+            Stepped::default(),
+            StepGlide::default(),
         ));
     }
 }
@@ -51,15 +58,16 @@ pub fn draw_players(
     }
 }
 
-/// Turns each player's model to the way they look (yaw only). Runs before
-/// transforms are handed to rendering
-pub fn turn_models(
+/// Turns each player's model to the way they look (yaw only), and sets it
+/// gliding through steps. Runs before transforms are handed to rendering
+pub fn pose_models(
     mut models: Query<(&ChildOf, &mut Transform), With<PlayerModel>>,
-    players: Query<&ActionState<PlayerInputs>>,
+    players: Query<(&ActionState<PlayerInputs>, &StepGlide)>,
 ) {
     for (parent, mut transform) in &mut models {
-        if let Ok(action) = players.get(parent.parent()) {
+        if let Ok((action, glide)) = players.get(parent.parent()) {
             transform.rotation = Quat::from_rotation_y(action.0.look.x);
+            transform.translation.y = glide.offset;
         }
     }
 }
@@ -75,13 +83,14 @@ pub fn detect_replicate_our_player(our_player: On<Add, Controlled>, mut cmds: Co
         .insert(InputMarker::<PlayerInputs>::default());
 }
 
-/// Puts the camera at our player's eye. Runs after frame interpolation, so it
-/// reads the smoothed position rather than the last tick's
+/// Puts the camera at our player's eye. Runs after frame interpolation and
+/// step gliding, so it reads the smoothed position rather than the last tick's
 pub fn camera_follow_player(
     mut camera: Single<&mut Transform, With<MainPlayerCamera>>,
-    player: Single<&Position, With<Controlled>>,
+    player: Single<(&Position, &StepGlide), With<Controlled>>,
     look_res: Res<PlayerInfo>,
 ) {
-    camera.translation = player.0 + Vec3::Y * EYE_HEIGHT;
+    let (position, glide) = *player;
+    camera.translation = position.0 + Vec3::Y * (EYE_HEIGHT + glide.offset);
     camera.rotation = Quat::from_euler(EulerRot::YXZ, look_res.look.x, look_res.look.y, 0.0);
 }

@@ -5,6 +5,12 @@
 //! move-and-slide, which stops at whatever the box hits and slides along it. The
 //! velocity left after sliding is kept for the next tick, so a player who lands
 //! loses their fall speed and one who walks into a wall stops pushing into it.
+//!
+//! Walking also steps: a player blocked by a ledge up to one block high is
+//! lifted onto it, and one walking off a drop of up to one block is pulled down
+//! onto the lower ground, so stairs and bumpy ground never throw them into the
+//! air. Both happen within one tick, exactly; the client smooths how it looks
+//! (`Stepped`).
 
 use core::time::Duration;
 
@@ -15,7 +21,7 @@ use lightyear::prelude::input::native::ActionState;
 use super::{
     config::{
         AIR_ACCEL, GROUND_ACCEL, GROUND_NORMAL_MIN, GROUND_PROBE, JUMP_HEIGHT, RUN_SPEED,
-        TERMINAL_SPEED, WALK_SPEED,
+        STEP_HEIGHT, TERMINAL_SPEED, WALK_SPEED,
     },
     definition::{player_collider, PlayerInputs},
 };
@@ -27,6 +33,12 @@ use crate::{
     net::config::TIMESTEP,
     world::chunk::{ChunkIndex, ChunkPos},
 };
+
+/// How far stepping moved a player up (+) or down (-) on the last tick, on top
+/// of their normal movement. Only the client adds this, to smooth the camera and
+/// model through steps; movement fills it in wherever it's present
+#[derive(Component, Default, Debug)]
+pub struct Stepped(pub f32);
 
 /// One player's state, read out before anyone moves
 struct Mover {
@@ -61,6 +73,7 @@ pub fn player_motion<F: QueryFilter + 'static>(
                 &mut LinearVelocity,
                 &ActionState<PlayerInputs>,
                 Option<&Flying>,
+                Option<&mut Stepped>,
             ),
             F,
         >,
@@ -72,7 +85,7 @@ pub fn player_motion<F: QueryFilter + 'static>(
     let movers: Vec<Mover> = set
         .p0()
         .iter()
-        .map(|(entity, position, velocity, action, flying)| Mover {
+        .map(|(entity, position, velocity, action, flying, _)| Mover {
             entity,
             position: position.0,
             velocity: velocity.0,
@@ -82,70 +95,171 @@ pub fn player_motion<F: QueryFilter + 'static>(
         .collect();
 
     let gravity = -gravity.0.y;
-    let moved: Vec<(Entity, Vec3, Vec3)> = {
+    let moved: Vec<(Entity, Moved)> = {
         let slide = set.p1();
-        let body = player_collider();
-        let config = MoveAndSlideConfig::default();
+        let body = Body {
+            slide: &slide,
+            shape: player_collider(),
+            config: MoveAndSlideConfig::default(),
+        };
         movers
             .into_iter()
             .map(|mover| {
-                if !surroundings_loaded(&index, mover.position) {
-                    return (mover.entity, mover.position, Vec3::ZERO);
-                }
-                let filter = SpatialQueryFilter::from_excluded_entities([mover.entity]);
-                let wanted = if mover.flying {
-                    fly(&mover.input)
+                let moved = if surroundings_loaded(&index, mover.position) {
+                    move_player(&body, &mover, gravity)
                 } else {
-                    let grounded = grounded(&slide, &body, mover.position, &filter);
-                    walk(mover.velocity, &mover.input, grounded, gravity)
+                    Moved {
+                        position: mover.position,
+                        velocity: Vec3::ZERO,
+                        stepped: 0.0,
+                    }
                 };
-                let out = slide.move_and_slide(
-                    &body,
-                    mover.position,
-                    Quat::IDENTITY,
-                    wanted,
-                    Duration::from_secs_f64(TIMESTEP),
-                    &config,
-                    &filter,
-                    |_| MoveAndSlideHitResponse::Accept,
-                );
-                (mover.entity, out.position, out.projected_velocity)
+                (mover.entity, moved)
             })
             .collect()
     };
 
     let mut players = set.p0();
-    for (entity, position, velocity) in moved {
-        let Ok((_, mut pos, mut vel, _, _)) = players.get_mut(entity) else {
+    for (entity, moved) in moved {
+        let Ok((_, mut pos, mut vel, _, _, stepped)) = players.get_mut(entity) else {
             continue;
         };
         // written only when changed, so a player standing still isn't marked
         // as moved every tick
-        pos.set_if_neq(Position(position));
-        vel.set_if_neq(LinearVelocity(velocity));
+        pos.set_if_neq(Position(moved.position));
+        vel.set_if_neq(LinearVelocity(moved.velocity));
+        if let Some(mut stepped) = stepped {
+            stepped.0 = moved.stepped;
+        }
     }
 }
 
-/// Whether the box at `position` stands on something: any part of its bottom
-/// resting on a surface flat enough to be ground. Sweeps the whole box down a
-/// hair, so a player on the very edge of a block still counts
-fn grounded(
-    slide: &MoveAndSlide,
-    body: &Collider,
+/// Where a player ends up after a tick
+struct Moved {
     position: Vec3,
-    filter: &SpatialQueryFilter,
-) -> bool {
-    let skin = MoveAndSlideConfig::default().skin_width;
-    slide
-        .cast_move(
-            body,
-            position,
+    velocity: Vec3,
+    /// See `Stepped`
+    stepped: f32,
+}
+
+/// Sweeps a player's box through the world
+struct Body<'a, 'w, 's> {
+    slide: &'a MoveAndSlide<'w, 's>,
+    shape: Collider,
+    config: MoveAndSlideConfig,
+}
+
+impl Body<'_, '_, '_> {
+    /// Moves the box from `from` along `velocity` for one tick, sliding along
+    /// whatever it hits
+    fn slide(&self, from: Vec3, velocity: Vec3, filter: &SpatialQueryFilter) -> MoveAndSlideOutput {
+        self.slide.move_and_slide(
+            &self.shape,
+            from,
             Quat::IDENTITY,
-            Vec3::NEG_Y * GROUND_PROBE,
-            skin,
+            velocity,
+            Duration::from_secs_f64(TIMESTEP),
+            &self.config,
             filter,
+            |_| MoveAndSlideHitResponse::Accept,
         )
-        .is_some_and(|hit| hit.normal1.y >= GROUND_NORMAL_MIN)
+    }
+
+    /// How far the box can go from `from` along `movement` before touching
+    /// something (up to the full length), and whether what it touches is
+    /// ground
+    fn reach(&self, from: Vec3, movement: Vec3, filter: &SpatialQueryFilter) -> (f32, bool) {
+        match self.slide.cast_move(
+            &self.shape,
+            from,
+            Quat::IDENTITY,
+            movement,
+            self.config.skin_width,
+            filter,
+        ) {
+            Some(hit) => (
+                hit.distance.min(movement.length()),
+                hit.normal1.y >= GROUND_NORMAL_MIN,
+            ),
+            None => (movement.length(), false),
+        }
+    }
+
+    /// Whether the box at `position` stands on something: any part of its
+    /// bottom resting on a surface flat enough to be ground. Sweeps the whole
+    /// box down a hair, so a player on the very edge of a block still counts
+    fn grounded(&self, position: Vec3, filter: &SpatialQueryFilter) -> bool {
+        let (distance, ground) = self.reach(position, Vec3::NEG_Y * GROUND_PROBE, filter);
+        ground && distance < GROUND_PROBE
+    }
+}
+
+/// One tick of one player's movement: flying, or walking with stepping
+fn move_player(body: &Body, mover: &Mover, gravity: f32) -> Moved {
+    let filter = SpatialQueryFilter::from_excluded_entities([mover.entity]);
+    if mover.flying {
+        let out = body.slide(mover.position, fly(&mover.input), &filter);
+        return Moved {
+            position: out.position,
+            velocity: out.projected_velocity,
+            stepped: 0.0,
+        };
+    }
+
+    let grounded = body.grounded(mover.position, &filter);
+    let wanted = walk(mover.velocity, &mover.input, grounded, gravity);
+    let plain = body.slide(mover.position, wanted, &filter);
+    let mut moved = Moved {
+        position: plain.position,
+        velocity: plain.projected_velocity,
+        stepped: 0.0,
+    };
+    // stepping is for walking on the ground, not for jumps
+    let walking = grounded && wanted.y <= 0.0;
+    if !walking {
+        return moved;
+    }
+
+    // blocked short of where the player meant to go: try the same move from a
+    // block higher, and settle back down onto whatever is there
+    let meant = (wanted * TIMESTEP as f32).with_y(0.0).length();
+    let went = (plain.position - mover.position).with_y(0.0).length();
+    if went + 1e-4 < meant {
+        if let Some(up) = step_up(body, mover.position, wanted, &filter) {
+            let further = (up.position - mover.position).with_y(0.0).length();
+            if further > went + 1e-4 {
+                moved = Moved {
+                    stepped: up.position.y - mover.position.y,
+                    ..up
+                };
+            }
+        }
+    }
+
+    // keep to the ground: if it now lies up to a block below (walked off a
+    // ledge or down a stair), go down onto it rather than fall
+    let (drop, ground) = body.reach(moved.position, Vec3::NEG_Y * STEP_HEIGHT, &filter);
+    if ground && drop > 0.0 {
+        moved.position.y -= drop;
+        moved.stepped -= drop;
+        moved.velocity.y = 0.0;
+    }
+    moved
+}
+
+/// The step-up attempt: rise up to a block (less under a low ceiling), move
+/// along the ground there, then drop back onto whatever is below. None if
+/// that leaves the player over nothing (a ledge too high, or a gap)
+fn step_up(body: &Body, from: Vec3, wanted: Vec3, filter: &SpatialQueryFilter) -> Option<Moved> {
+    let (rise, _) = body.reach(from, Vec3::Y * STEP_HEIGHT, filter);
+    let raised = from + Vec3::Y * rise;
+    let out = body.slide(raised, wanted.with_y(0.0), filter);
+    let (drop, ground) = body.reach(out.position, Vec3::NEG_Y * (rise + GROUND_PROBE), filter);
+    ground.then(|| Moved {
+        position: out.position - Vec3::Y * drop,
+        velocity: out.projected_velocity.with_y(0.0),
+        stepped: 0.0,
+    })
 }
 
 /// The horizontal velocity the inputs ask for: the move keys, turned to face
@@ -225,7 +339,10 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
 
     use super::*;
-    use crate::world::chunk::{pos, Chunk};
+    use crate::{
+        player::config::PLAYER_HALF_HEIGHT,
+        world::chunk::{pos, Chunk},
+    };
 
     const G: f32 = 9.81;
 
@@ -241,7 +358,9 @@ mod tests {
     /// to collide with)
     fn world_with(loaded: impl Iterator<Item = IVec3>) -> (App, Entity) {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, PhysicsPlugins::default()));
+        // physics in PostUpdate rather than on a fixed clock, so a test can
+        // run it to take in new colliders when it wants
+        app.add_plugins((MinimalPlugins, PhysicsPlugins::new(PostUpdate)));
         app.finish();
         app.cleanup();
         let world = app.world_mut();
@@ -284,6 +403,55 @@ mod tests {
             .run_system_once(player_motion::<()>)
             .unwrap();
         assert_ne!(app.world().get::<Position>(player).unwrap().0, Vec3::ONE);
+    }
+
+    /// A solid box for the player to walk on, `size` across, its centre at `at`
+    fn spawn_block(app: &mut App, at: Vec3, size: Vec3) {
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(size.x, size.y, size.z),
+            Position(at),
+        ));
+    }
+
+    #[test]
+    fn walking_goes_up_and_down_a_step_without_leaving_the_ground() {
+        // floor with its top at 0, and a one-block step (top at 0.5) running
+        // from z = -1 to z = -3, in the way of a player walking toward -z
+        let wide = (-2..=2).flat_map(|y| {
+            (-2..=2).flat_map(move |z| (-2..=2).map(move |x| IVec3::new(x, y, z)))
+        });
+        let (mut app, player) = world_with(wide);
+        spawn_block(&mut app, Vec3::new(0.0, -0.5, 0.0), Vec3::new(20.0, 1.0, 20.0));
+        spawn_block(&mut app, Vec3::new(0.0, 0.25, -2.0), Vec3::new(4.0, 0.5, 2.0));
+        let floor = PLAYER_HALF_HEIGHT;
+        let step = floor + 0.5;
+        app.world_mut()
+            .entity_mut(player)
+            .insert((Position(Vec3::new(0.0, floor, 0.0)), LinearVelocity::ZERO));
+        // let physics take in the new colliders. Just physics, not a whole
+        // update: in a workspace build, avian's mesh-collider cache is on and
+        // wants bevy's assets, which this headless world doesn't have
+        app.world_mut().run_schedule(PostUpdate);
+
+        // walk until a metre past the step (well short of the floor's end)
+        let mut went_up = false;
+        for _ in 0..(64 * 5) {
+            app.world_mut()
+                .run_system_once(player_motion::<()>)
+                .unwrap();
+            let at = app.world().get::<Position>(player).unwrap().0;
+            // always standing on the floor or the step, never in between
+            let on = |height: f32| (at.y - height).abs() < 0.02;
+            assert!(on(floor) || on(step), "in the air at {at}");
+            went_up |= on(step);
+            if at.z < -4.0 {
+                break;
+            }
+        }
+        let at = app.world().get::<Position>(player).unwrap().0;
+        assert!(went_up, "never stepped up");
+        assert!(at.z < -4.0, "didn't get past the step: {at}");
     }
 
     #[test]

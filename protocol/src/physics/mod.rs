@@ -31,6 +31,12 @@ impl Plugin for PhysicsProtocolPlugin {
             .replicate() // is sent over the link
             .predict() // is simulated by clients
             .with_rollback_condition(rollback::position)
+            // when a rollback corrects a predicted player, blend the drawn
+            // position over to the corrected one instead of snapping. Also what
+            // hands the corrected position to frame interpolation after a
+            // rollback: without it, frame interpolation restores the stale
+            // pre-rollback position and the correction is lost for good
+            .add_linear_correction_fn()
             .add_linear_interpolation(); // visual interpolation
 
         // linear velocity does not require interpolation like position
