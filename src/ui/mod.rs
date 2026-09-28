@@ -1,6 +1,7 @@
 //! On-screen UI: the hotbar and inventory, the creative block picker, the
 //! debug screen, and the pause menu.
 //!
+//! - `crosshair.rs`: the crosshair, spreading with speed
 //! - `config.rs`: sizes and colours (placeholder styling, meant to be redesigned)
 //! - `font.rs`: the one font all UI text uses (swap in your own there)
 //! - `debug.rs`: the debug screen (F3)
@@ -17,6 +18,7 @@ use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use crate::world::meshing::material::BlockAtlas;
 
 mod config;
+mod crosshair;
 mod debug;
 pub mod font;
 mod help;
@@ -40,7 +42,22 @@ impl Plugin for UiPlugin {
         app.init_resource::<pause::PausePage>();
         app.init_resource::<settings::SettingsTab>();
         app.init_resource::<settings::Rebinding>();
-        app.add_systems(Startup, (debug::spawn_debug, pause::spawn_pause_menu));
+        app.init_resource::<crosshair::Spread>();
+        app.add_systems(
+            Startup,
+            (
+                debug::spawn_debug,
+                pause::spawn_pause_menu,
+                crosshair::spawn_crosshair,
+            ),
+        );
+        app.add_systems(
+            Update,
+            (
+                crosshair::show_crosshair,
+                (crosshair::spread_crosshair, crosshair::place_crosshair).chain(),
+            ),
+        );
         app.add_systems(
             Update,
             (

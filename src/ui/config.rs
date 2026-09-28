@@ -101,3 +101,17 @@ pub const RENDER_SCALES: [f32; 5] = [0.5, 0.67, 0.75, 0.85, 1.0];
 /// UI sizes to choose from. A list rather than a slider: resizing the UI while
 /// dragging would move the slider out from under the mouse
 pub const UI_SCALES: [f32; 5] = [0.75, 1.0, 1.25, 1.5, 2.0];
+
+/// Crosshair sizes (UI pixels)
+pub const CROSSHAIR_DOT: f32 = 2.0;
+pub const CROSSHAIR_LINE_LENGTH: f32 = 8.0;
+pub const CROSSHAIR_LINE_THICKNESS: f32 = 2.0;
+/// Gap between the centre and each line when standing still
+pub const CROSSHAIR_GAP: f32 = 4.0;
+/// Extra gap per metre per second of the player's speed
+pub const CROSSHAIR_SPREAD_PER_SPEED: f32 = 1.5;
+/// Room left around the lines inside the crosshair camera's box
+pub const CROSSHAIR_PADDING: f32 = 2.0;
+/// How quickly the spread follows the player's speed (per second: higher is
+/// snappier)
+pub const CROSSHAIR_SETTLE: f32 = 12.0;
