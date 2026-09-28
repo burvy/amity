@@ -52,17 +52,23 @@ fn tile_named(name: &str) -> u32 {
         .map_or(atlas::MISSING, |&(_, tile)| tile)
 }
 
-/// Maps a 0..1 face UV into `tile`'s rectangle of the atlas. Pulled in by a sliver
-/// of a pixel so float rounding at a face's edge never samples the next tile; any
-/// more than that crops the edge pixels and visibly shifts the texture.
-pub fn tile_uv(tile: u32, [u, v]: [f32; 2]) -> [f32; 2] {
-    let size = Vec2::new(1.0 / atlas::COLUMNS as f32, 1.0 / atlas::ROWS as f32);
-    let inset = size / (64 * atlas::TILE_PIXELS) as f32;
-    let corner = Vec2::new((tile % atlas::COLUMNS) as f32, (tile / atlas::COLUMNS) as f32) * size;
-    [
-        corner.x + inset.x + u * (size.x - 2.0 * inset.x),
-        corner.y + inset.y + v * (size.y - 2.0 * inset.y),
-    ]
+/// A tile's size in the atlas, in atlas UV (0..1 across the whole atlas)
+pub fn tile_size() -> Vec2 {
+    Vec2::new(1.0 / atlas::COLUMNS as f32, 1.0 / atlas::ROWS as f32)
+}
+
+/// A tile's top-left corner in the atlas, in atlas UV
+pub fn tile_corner(tile: u32) -> [f32; 2] {
+    let corner = Vec2::new((tile % atlas::COLUMNS) as f32, (tile / atlas::COLUMNS) as f32);
+    (corner * tile_size()).to_array()
+}
+
+/// How far in from a tile's edges the shader samples, as a share of the tile:
+/// a sliver of a pixel, so float rounding at a face's edge never samples the
+/// next tile. Any more than that crops the edge pixels and visibly shifts the
+/// texture
+pub fn tile_inset() -> f32 {
+    1.0 / (64 * atlas::TILE_PIXELS) as f32
 }
 
 #[cfg(test)]
@@ -71,13 +77,11 @@ mod tests {
     use crate::world::meshing::mesher::FACES;
 
     #[test]
-    fn tile_uvs_stay_inside_their_tile() {
-        let size = Vec2::new(1.0 / atlas::COLUMNS as f32, 1.0 / atlas::ROWS as f32);
-        // tile 1 is column 1, row 0
-        let [u0, v0] = tile_uv(1, [0.0, 0.0]);
-        let [u1, v1] = tile_uv(1, [1.0, 1.0]);
-        assert!(u0 > size.x && v0 > 0.0);
-        assert!(u1 < 2.0 * size.x && v1 < size.y);
+    fn tile_corners_step_across_then_down() {
+        let size = tile_size();
+        assert_eq!(tile_corner(0), [0.0, 0.0]);
+        assert_eq!(tile_corner(1), [size.x, 0.0]);
+        assert_eq!(tile_corner(atlas::COLUMNS), [0.0, size.y]);
     }
 
     #[test]

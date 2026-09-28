@@ -16,8 +16,8 @@ use bevy::{
 
 use super::{
     material::ChunkMaterials,
-    mesher::{chunk_mesh, ChunkMeshes, FACES},
-    padded::PaddedChunk,
+    mesher::{chunk_mesh, ChunkMeshes},
+    padded::{neighbour_offsets, PaddedChunk},
 };
 
 /// Marks a chunk for (re)meshing
@@ -35,12 +35,14 @@ pub struct MeshTask(Task<ChunkMeshes>);
 #[derive(Component)]
 pub struct FluidMesh(Entity);
 
-/// A chunk is meshed once it and all six face neighbours are loaded: its border
-/// faces depend on them, so meshing sooner would be redone as each one arrives.
-/// A new chunk can complete itself or any of its neighbours. An edited block
-/// remeshes its chunk, plus a neighbour when the block is on their shared face.
-/// Chunks at the edge of the loaded area are never meshed; that ring is
-/// what the server's view distance leaves out.
+/// A chunk is meshed once it and all 26 chunks around it are loaded: its
+/// border faces, and the shading at its edges (ambient occlusion looks
+/// diagonally), depend on them, so meshing sooner would be redone as each one
+/// arrives. A new chunk can complete itself or any chunk around it. An edited
+/// block remeshes its chunk, plus every chunk whose border includes it (up to 7
+/// more, for a block in a chunk's corner). Chunks at the edge of the loaded
+/// area are never meshed; that ring is what the server's view distance leaves
+/// out.
 pub fn mark_dirty(
     mut cmds: Commands,
     added: Query<&ChunkPos, Added<Chunk>>,
@@ -50,23 +52,28 @@ pub fn mark_dirty(
 ) {
     let ready = |pos: IVec3| {
         index.contains(ChunkPos(pos))
-            && FACES
-                .iter()
-                .all(|face| index.contains(ChunkPos(pos + face.normal)))
+            && neighbour_offsets().all(|offset| index.contains(ChunkPos(pos + offset)))
     };
     let mut dirty = HashSet::new();
     for pos in &added {
-        dirty.extend(iter::once(pos.0).chain(FACES.iter().map(|face| pos.0 + face.normal)));
+        dirty.extend(iter::once(pos.0).chain(neighbour_offsets().map(|offset| pos.0 + offset)));
     }
     for change in changes.read() {
         let Ok(pos) = positions.get(change.chunk) else {
             continue;
         };
         dirty.insert(pos.0);
-        for face in &FACES {
-            let beyond = change.local + face.normal;
-            if beyond.cmplt(IVec3::ZERO).any() || beyond.cmpge(IVec3::splat(CHUNK_SIZE)).any() {
-                dirty.insert(pos.0 + face.normal);
+        // the chunks this block borders: on each axis, the one beyond it if the
+        // block is at that edge
+        let last = CHUNK_SIZE - 1;
+        for offset in neighbour_offsets() {
+            let borders = (0..3).all(|axis| match offset[axis] {
+                -1 => change.local[axis] == 0,
+                1 => change.local[axis] == last,
+                _ => true,
+            });
+            if borders {
+                dirty.insert(pos.0 + offset);
             }
         }
     }

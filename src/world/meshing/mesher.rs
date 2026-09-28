@@ -1,4 +1,15 @@
-//! Builds a chunk's mesh: one textured square per visible block face
+//! Builds a chunk's meshes.
+//!
+//! 1. Visibility: a face is drawn only where it can be seen (see `chunk_mesh`).
+//! 2. Ambient occlusion: each face corner is darkened by the blocks around it,
+//!    so creases, corners and the foot of walls get soft shading. It's worked
+//!    out here, once per mesh, and stored per vertex: it costs nothing to draw.
+//! 3. Greedy meshing: neighbouring faces that look the same (same texture, same
+//!    shading) are merged into one large rectangle. A flat field that was
+//!    thousands of squares becomes a handful, which every render pass (the
+//!    view, and each shadow cascade) draws faster. The texture still repeats
+//!    once per block: the block shader (`block.wgsl`) tiles it across the
+//!    rectangle.
 
 use amity_protocol::world::{
     block::Block,
@@ -11,48 +22,36 @@ use bevy::{
 };
 
 use super::{
+    config::AO_BRIGHTNESS,
     padded::PaddedChunk,
-    textures::{face_tile, tile_uv},
+    textures::{face_tile, tile_corner},
 };
 
-/// One side of a unit block. Corners are counter-clockwise seen from outside
-/// (bevy's front face), in the order bottom-left, bottom-right, top-right, top-left.
-/// faces are not drawn from the inside and are drawn from the outside.
+/// One side of a block. `u` and `v` run across the face: a rectangle's corners
+/// go (0,0), (1,0), (1,1), (0,1) in (u, v), and since `u` x `v` = `normal`,
+/// that's counter-clockwise seen from outside (bevy's front face)
 pub struct Face {
     pub normal: IVec3,
-    corners: [[f32; 3]; 4],
+    u: IVec3,
+    v: IVec3,
 }
 
 pub const FACES: [Face; 6] = [
-    Face {
-        normal: IVec3::X,
-        corners: [[1., 0., 1.], [1., 0., 0.], [1., 1., 0.], [1., 1., 1.]],
-    },
-    Face {
-        normal: IVec3::NEG_X,
-        corners: [[0., 0., 0.], [0., 0., 1.], [0., 1., 1.], [0., 1., 0.]],
-    },
-    Face {
-        normal: IVec3::Y,
-        corners: [[0., 1., 1.], [1., 1., 1.], [1., 1., 0.], [0., 1., 0.]],
-    },
-    Face {
-        normal: IVec3::NEG_Y,
-        corners: [[0., 0., 0.], [1., 0., 0.], [1., 0., 1.], [0., 0., 1.]],
-    },
-    Face {
-        normal: IVec3::Z,
-        corners: [[0., 0., 1.], [1., 0., 1.], [1., 1., 1.], [0., 1., 1.]],
-    },
-    Face {
-        normal: IVec3::NEG_Z,
-        corners: [[1., 0., 0.], [0., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
-    },
+    Face { normal: IVec3::X, u: IVec3::Y, v: IVec3::Z },
+    Face { normal: IVec3::NEG_X, u: IVec3::Z, v: IVec3::Y },
+    Face { normal: IVec3::Y, u: IVec3::Z, v: IVec3::X },
+    Face { normal: IVec3::NEG_Y, u: IVec3::X, v: IVec3::Z },
+    Face { normal: IVec3::Z, u: IVec3::X, v: IVec3::Y },
+    Face { normal: IVec3::NEG_Z, u: IVec3::Y, v: IVec3::X },
 ];
 
-/// Matches `Face::corners`. Every face gets the whole 0..1 square, which
-/// `tile_uv` then maps into the block's atlas tile.
-const FACE_UVS: [[f32; 2]; 4] = [[0., 1.], [1., 1.], [1., 0.], [0., 0.]];
+/// The corners of a face, in (u, v), in winding order
+const CORNERS: [IVec2; 4] = [
+    IVec2::new(0, 0),
+    IVec2::new(1, 0),
+    IVec2::new(1, 1),
+    IVec2::new(0, 1),
+];
 
 /// A chunk's two meshes. They're drawn with different materials: fluids are
 /// see-through, and see-through surfaces must be drawn after (and sorted apart
@@ -64,30 +63,87 @@ pub struct ChunkMeshes {
     pub fluid: Mesh,
 }
 
-/// Face-culled meshes: a face is emitted only where it can be seen, including
-/// across chunk borders.
+/// What a visible face looks like. Faces that match can be merged
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Look {
+    fluid: bool,
+    tile: u32,
+    /// ambient occlusion per corner, in `CORNERS` order: 0 darkest, 3 open
+    ao: [u8; 4],
+}
+
+impl Look {
+    /// Whether the shading changes along u (then a merge along u would stretch
+    /// it wrongly), or along v
+    fn varies_along_u(&self) -> bool {
+        self.ao[0] != self.ao[1] || self.ao[3] != self.ao[2]
+    }
+    fn varies_along_v(&self) -> bool {
+        self.ao[0] != self.ao[3] || self.ao[1] != self.ao[2]
+    }
+}
+
+/// Visible, merged faces for both meshes.
 ///
+/// Which faces are visible:
 /// - a solid block's face shows unless the block next to it is solid. So stone
 ///   under water still draws its faces, which you see through the water
 /// - a fluid block's face shows only where it touches air. Water next to water
 ///   draws nothing, so a lake is one surface, not a grid of cubes, and water
 ///   against stone is hidden by the stone
+///
+/// For each face direction, the chunk is cut into slices one block thick. Each
+/// slice's visible faces go in a 2D grid, which is then covered with as few
+/// rectangles as it can: from each uncovered face, grow along u while the faces
+/// match, then along v while whole rows match.
 pub fn chunk_mesh(chunk: &PaddedChunk) -> ChunkMeshes {
+    const N: i32 = CHUNK_SIZE;
     let mut solid = MeshBuilder::default();
     let mut fluid = MeshBuilder::default();
+    let mut grid: Vec<Option<Look>> = vec![None; (N * N) as usize];
+    let cell = |a: i32, b: i32| (a + b * N) as usize;
 
-    for y in 0..CHUNK_SIZE {
-        for z in 0..CHUNK_SIZE {
-            for x in 0..CHUNK_SIZE {
-                let local = IVec3::new(x, y, z);
-                let block = chunk.get(local);
-                for face in &FACES {
-                    let neighbour = chunk.get(local + face.normal);
-                    if block.is_solid() && !neighbour.is_solid() {
-                        solid.face(local, face, face_tile(block, face.normal));
-                    } else if block.is_fluid() && neighbour == Block::AIR {
-                        fluid.face(local, face, face_tile(block, face.normal));
+    for face in &FACES {
+        // the axis the slices are cut across (as a positive direction)
+        let across = face.normal.abs();
+        for slice in 0..N {
+            // 1. this slice's visible faces
+            for b in 0..N {
+                for a in 0..N {
+                    let block_pos = across * slice + face.u * a + face.v * b;
+                    grid[cell(a, b)] = look(chunk, face, block_pos);
+                }
+            }
+
+            // 2. covered with rectangles
+            for b in 0..N {
+                for a in 0..N {
+                    let Some(look) = grid[cell(a, b)] else {
+                        continue;
+                    };
+                    let mut width = 1;
+                    if !look.varies_along_u() {
+                        while a + width < N && grid[cell(a + width, b)] == Some(look) {
+                            width += 1;
+                        }
                     }
+                    let mut height = 1;
+                    if !look.varies_along_v() {
+                        while b + height < N
+                            && (0..width).all(|k| grid[cell(a + k, b + height)] == Some(look))
+                        {
+                            height += 1;
+                        }
+                    }
+                    for dv in 0..height {
+                        for du in 0..width {
+                            grid[cell(a + du, b + dv)] = None;
+                        }
+                    }
+
+                    let block_pos = across * slice + face.u * a + face.v * b;
+                    let builder = if look.fluid { &mut fluid } else { &mut solid };
+                    builder.rectangle(face, block_pos, IVec2::new(width, height), look);
                 }
             }
         }
@@ -99,27 +155,92 @@ pub fn chunk_mesh(chunk: &PaddedChunk) -> ChunkMeshes {
     }
 }
 
-/// Collects faces into one mesh's vertex lists
+/// How the face of the block at `pos` facing `face.normal` looks, if visible
+fn look(chunk: &PaddedChunk, face: &Face, pos: IVec3) -> Option<Look> {
+    let block = chunk.get(pos);
+    let front = pos + face.normal;
+    let neighbour = chunk.get(front);
+    let fluid = if block.is_solid() && !neighbour.is_solid() {
+        false
+    } else if block.is_fluid() && neighbour == Block::AIR {
+        true
+    } else {
+        return None;
+    };
+    // a fluid's surface isn't shaded: it would show as dark patches on water
+    let ao = if fluid {
+        [3; 4]
+    } else {
+        CORNERS.map(|corner| {
+            // towards this corner, along u and along v
+            let du = face.u * (corner.x * 2 - 1);
+            let dv = face.v * (corner.y * 2 - 1);
+            let solid = |p: IVec3| chunk.get(p).is_solid();
+            vertex_ao(solid(front + du), solid(front + dv), solid(front + du + dv))
+        })
+    };
+    Some(Look {
+        fluid,
+        tile: face_tile(block, face.normal),
+        ao,
+    })
+}
+
+/// A corner's ambient occlusion from the blocks in front of the face around
+/// it: the two beside the corner and the one diagonal to it. 3 is open; 0 is
+/// fully tucked in. Both sides solid is darkest whatever the diagonal is (the
+/// corner is enclosed)
+fn vertex_ao(side_1: bool, side_2: bool, diagonal: bool) -> u8 {
+    if side_1 && side_2 {
+        0
+    } else {
+        3 - (side_1 as u8 + side_2 as u8 + diagonal as u8)
+    }
+}
+
+/// Collects rectangles into one mesh's vertex lists
 #[derive(Default)]
 struct MeshBuilder {
     positions: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
+    /// position across the face, in blocks: the shader repeats the texture
+    /// once per whole number
     uvs: Vec<[f32; 2]>,
+    /// the texture's tile in the atlas (its top-left corner)
+    tiles: Vec<[f32; 2]>,
+    /// ambient occlusion, as a brightness the texture is multiplied by
+    colours: Vec<[f32; 4]>,
     indices: Vec<u32>,
 }
 
 impl MeshBuilder {
-    /// Adds one block face: 4 corners, 2 triangles, textured with atlas `tile`
-    fn face(&mut self, local: IVec3, face: &Face, tile: u32) {
+    /// Adds a rectangle of `size` faces (along u, v) whose first face belongs
+    /// to the block at `block_pos`: 4 corners, 2 triangles
+    fn rectangle(&mut self, face: &Face, block_pos: IVec3, size: IVec2, look: Look) {
         let base = self.positions.len() as u32;
-        let offset = local.as_vec3();
-        for corner in face.corners {
-            self.positions.push(((offset + Vec3::from(corner)) * BLOCK_SIZE).to_array());
+        // along a positive normal, the face is on the block's far side
+        let origin = block_pos + face.normal.max(IVec3::ZERO);
+        let tile = tile_corner(look.tile);
+        for (corner, ao) in CORNERS.iter().zip(look.ao) {
+            let pos = (origin + face.u * corner.x * size.x + face.v * corner.y * size.y).as_vec3();
+            self.positions.push((pos * BLOCK_SIZE).to_array());
+            self.uvs.push(texture_uv(face.normal, pos));
+            let brightness = AO_BRIGHTNESS[ao as usize];
+            self.colours.push([brightness, brightness, brightness, 1.0]);
         }
         self.normals.extend([face.normal.as_vec3().to_array(); 4]);
-        self.uvs.extend(FACE_UVS.map(|uv| tile_uv(tile, uv)));
-        // two triangles sharing the diagonal from corner 0 to corner 2
-        self.indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
+        self.tiles.extend([tile; 4]);
+
+        // The rectangle's two triangles share a diagonal. Shading is blended
+        // across each triangle, so a dark corner on the diagonal would smear
+        // along it: use the diagonal whose ends are brighter
+        let ao = look.ao;
+        let indices = if ao[0] + ao[2] >= ao[1] + ao[3] {
+            [0, 1, 2, 0, 2, 3]
+        } else {
+            [1, 2, 3, 1, 3, 0]
+        };
+        self.indices.extend(indices.map(|i| base + i));
     }
 
     fn build(self) -> Mesh {
@@ -130,7 +251,24 @@ impl MeshBuilder {
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.tiles)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colours)
         .with_inserted_indices(Indices::U32(self.indices))
+    }
+}
+
+/// Where on the texture a point of a face is, in blocks: the texture repeats
+/// once per block. Taken from the point's position, so a texture continues
+/// seamlessly across merged faces. Sides have the texture's top at the top (v
+/// grows downwards in images), and nothing is mirrored seen from outside
+fn texture_uv(normal: IVec3, p: Vec3) -> [f32; 2] {
+    match normal {
+        IVec3::Y => [p.x, p.z],
+        IVec3::NEG_Y => [p.x, -p.z],
+        IVec3::X => [-p.z, -p.y],
+        IVec3::NEG_X => [p.z, -p.y],
+        IVec3::Z => [p.x, -p.y],
+        _ => [-p.x, -p.y],
     }
 }
 
@@ -140,26 +278,83 @@ mod tests {
 
     use super::*;
 
+    /// (solid, fluid) rectangles in a chunk alone (no neighbours)
+    fn rectangles(chunk: &Chunk) -> (usize, usize) {
+        let meshes = chunk_mesh(&PaddedChunk::new(chunk, |_| None));
+        (
+            meshes.solid.count_vertices() / 4,
+            meshes.fluid.count_vertices() / 4,
+        )
+    }
+
     #[test]
     fn corners_wind_counter_clockwise_around_normal() {
         for face in &FACES {
-            let c = face.corners.map(Vec3::from);
-            for [a, b, d] in [[0, 1, 2], [0, 2, 3]] {
-                assert_eq!((c[b] - c[a]).cross(c[d] - c[a]), face.normal.as_vec3());
-            }
+            assert_eq!(face.u.cross(face.v), face.normal);
         }
     }
 
     #[test]
-    fn culls_hidden_faces() {
+    fn a_lone_block_has_six_faces() {
         let mut chunk = Chunk::default();
         chunk.set(IVec3::ZERO, Block::STONE);
-        let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None)).solid;
-        assert_eq!(mesh.count_vertices(), 6 * 4);
+        assert_eq!(rectangles(&chunk), (6, 0));
+    }
 
+    #[test]
+    fn flat_faces_merge() {
+        // two blocks side by side are still one box: 6 rectangles
+        let mut chunk = Chunk::default();
+        chunk.set(IVec3::ZERO, Block::STONE);
         chunk.set(IVec3::X, Block::STONE);
-        let mesh = chunk_mesh(&PaddedChunk::new(&chunk, |_| None)).solid;
-        assert_eq!(mesh.count_vertices(), 10 * 4);
+        assert_eq!(rectangles(&chunk), (6, 0));
+
+        // a whole flat floor too
+        let mut floor = Chunk::default();
+        for x in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                floor.set(IVec3::new(x, 0, z), Block::STONE);
+            }
+        }
+        assert_eq!(rectangles(&floor), (6, 0));
+    }
+
+    #[test]
+    fn different_textures_dont_merge() {
+        let mut chunk = Chunk::default();
+        chunk.set(IVec3::ZERO, Block::STONE);
+        chunk.set(IVec3::X, Block::SAND);
+        // the 4 long sides each split in two, plus the 2 ends
+        assert_eq!(rectangles(&chunk), (10, 0));
+    }
+
+    #[test]
+    fn corners_darken_by_their_neighbours() {
+        assert_eq!(vertex_ao(false, false, false), 3);
+        assert_eq!(vertex_ao(false, false, true), 2);
+        assert_eq!(vertex_ao(true, false, true), 1);
+        assert_eq!(vertex_ao(true, true, false), 0);
+    }
+
+    #[test]
+    fn a_block_on_a_floor_shades_the_floor_around_it() {
+        let mut chunk = Chunk::default();
+        for x in 0..5 {
+            for z in 0..5 {
+                chunk.set(IVec3::new(x, 0, z), Block::STONE);
+            }
+        }
+        chunk.set(IVec3::new(2, 1, 2), Block::STONE);
+        let padded = PaddedChunk::new(&chunk, |_| None);
+        let top = &FACES[2];
+        // the floor face right beside the block: its two corners against it are dark
+        let beside = look(&padded, top, IVec3::new(3, 0, 2)).unwrap();
+        assert_eq!(beside.ao.iter().filter(|&&ao| ao < 3).count(), 2);
+        // far from it: untouched
+        let far = look(&padded, top, IVec3::new(0, 0, 0)).unwrap();
+        assert_eq!(far.ao, [3; 4]);
+        // under it: hidden
+        assert!(look(&padded, top, IVec3::new(2, 0, 2)).is_none());
     }
 
     #[test]
@@ -179,19 +374,6 @@ mod tests {
     }
 
     #[test]
-    fn neighbour_chunk_hides_border_face() {
-        let mut chunk = Chunk::default();
-        chunk.set(IVec3::new(CHUNK_SIZE - 1, 0, 0), Block::STONE);
-        let mut east = Chunk::default();
-        east.set(IVec3::ZERO, Block::STONE);
-
-        let alone = chunk_mesh(&PaddedChunk::new(&chunk, |_| None)).solid;
-        let joined = chunk_mesh(&PaddedChunk::new(&chunk, |o| (o == IVec3::X).then_some(&east))).solid;
-        assert_eq!(alone.count_vertices(), 6 * 4);
-        assert_eq!(joined.count_vertices(), 5 * 4);
-    }
-
-    #[test]
     fn solid_chunk_surrounded_by_solid_has_no_faces() {
         let stone = Chunk::Uniform(Block::STONE);
         let mesh = chunk_mesh(&PaddedChunk::new(&stone, |_| Some(&stone))).solid;
@@ -205,10 +387,8 @@ mod tests {
         chunk.set(IVec3::new(1, 1, 1), Block::WATER);
         chunk.set(IVec3::new(2, 1, 1), Block::WATER);
         chunk.set(IVec3::new(1, 0, 1), Block::STONE);
-        let meshes = chunk_mesh(&PaddedChunk::new(&chunk, |_| None));
-        // 2 water blocks * 6 faces, minus the 2 they share, minus the 1 on stone
-        assert_eq!(meshes.fluid.count_vertices(), 9 * 4);
-        // the stone shows all 6 faces: water doesn't hide them
-        assert_eq!(meshes.solid.count_vertices(), 6 * 4);
+        // water: one top, one bottom (the half over air), 2 long sides, 2 ends.
+        // The stone shows all 6 faces: water doesn't hide them
+        assert_eq!(rectangles(&chunk), (6, 6));
     }
 }

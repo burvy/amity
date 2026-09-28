@@ -1,3 +1,7 @@
+// bevy's material derive (`AsBindGroup`, in world/meshing/material.rs) nests
+// deeper than the compiler checks by default, which only warns, but noisily
+#![recursion_limit = "256"]
+
 use bevy::prelude::*;
 
 mod net;
