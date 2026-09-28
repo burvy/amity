@@ -18,15 +18,21 @@ use lightyear::prelude::{
 };
 
 use super::{config::*, definition::PlayerInfo};
+use crate::settings::{
+    definition::{Action, Settings},
+    input::ActionInput,
+};
 
 /// Stores the accumulated mouse motion in the PlayerInfo resource
 pub fn rotate_player_resource(
     mut look_res: ResMut<PlayerInfo>,
     mouse_mot_res: Res<AccumulatedMouseMotion>,
+    settings: Res<Settings>,
 ) {
     // the mouse moves the cursor instead while the inventory is open
     if !look_res.paused && !look_res.menu_open {
-        look_res.update_look(mouse_mot_res.delta);
+        let controls = &settings.controls;
+        look_res.update_look(mouse_mot_res.delta, controls.sensitivity, controls.invert_y);
     }
 }
 
@@ -35,8 +41,7 @@ pub fn rotate_player_resource(
 /// TODO: allow configurable input controls
 pub fn buffer_input(
     mut action: Single<&mut ActionState<PlayerInputs>, With<InputMarker<PlayerInputs>>>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mouse: Res<ButtonInput<MouseButton>>,
+    input: ActionInput,
     look_res: Res<PlayerInfo>, // yaw/pitch stored in resource
 ) {
     if look_res.paused {
@@ -47,21 +52,21 @@ pub fn buffer_input(
         return;
     }
 
-    let held = |key: KeyCode| f32::from(keys.pressed(key));
+    let held = |action| f32::from(input.pressed(action));
     action.0 = PlayerInputs {
         look: look_res.look,
         motion: Vec2 {
-            x: held(KEY_RIGHT) - held(KEY_LEFT),
-            y: held(KEY_BACK) - held(KEY_FORWARD), // z motion is flipped in bevy
+            x: held(Action::Right) - held(Action::Left),
+            y: held(Action::Back) - held(Action::Forward), // z motion is flipped in bevy
         },
-        // Hold spacebar to jump repeatedly
-        jump: keys.pressed(KEY_JUMP),
-        sprint: keys.any_pressed(KEY_SPRINT),
-        interact: keys.pressed(KEY_INTERACT),
+        // Hold jump to jump repeatedly
+        jump: input.pressed(Action::Jump),
+        sprint: input.pressed(Action::Sprint),
+        interact: input.pressed(Action::Interact),
         // clicks go to the inventory while it's open, not to the world
-        primary: mouse.pressed(BUTTON_PRIMARY) && !look_res.menu_open,
-        secondary: mouse.pressed(BUTTON_SECONDARY) && !look_res.menu_open,
-        descend: keys.pressed(KEY_CROUCH),
+        primary: input.pressed(Action::Break) && !look_res.menu_open,
+        secondary: input.pressed(Action::Place) && !look_res.menu_open,
+        descend: input.pressed(Action::Crouch),
         slot: look_res.slot,
     };
 }
@@ -69,13 +74,13 @@ pub fn buffer_input(
 /// Picks the hotbar slot: its number key, or the scroll wheel (wrapping round)
 pub fn select_slot(
     mut info: ResMut<PlayerInfo>,
-    keys: Res<ButtonInput<KeyCode>>,
+    input: ActionInput,
     scroll: Res<AccumulatedMouseScroll>,
 ) {
     if info.paused {
         return;
     }
-    if let Some(slot) = KEY_SLOTS.iter().position(|&key| keys.just_pressed(key)) {
+    if let Some(slot) = Action::SLOTS.iter().position(|&slot| input.just_pressed(slot)) {
         info.slot = slot as u8;
     }
     let slots = HOTBAR_SLOTS as i32;
@@ -89,13 +94,13 @@ pub fn select_slot(
 /// the request goes as a reliable message, and `Flying` comes back replicated
 pub fn toggle_flight(
     info: Res<PlayerInfo>,
-    keys: Res<ButtonInput<KeyCode>>,
+    input: ActionInput,
     time: Res<Time>,
     mode: Option<Single<&GameMode, With<Controlled>>>,
     mut sender: Single<&mut MessageSender<ToggleFlight>>,
     mut last_press: Local<Option<f32>>,
 ) {
-    if info.paused || !keys.just_pressed(KEY_JUMP) {
+    if info.paused || !input.just_pressed(Action::Jump) {
         return;
     }
     let now = time.elapsed_secs();

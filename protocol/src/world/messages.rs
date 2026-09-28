@@ -43,6 +43,13 @@ pub struct BlockChanged {
     pub block: Block,
 }
 
+/// Client -> server: how many chunks out (sideways) the player wants loaded, from
+/// their settings. The server caps it at its own maximum. Sent on `EditChannel`
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SetViewDistance {
+    pub chunks: u8,
+}
+
 /// Client -> server: "set this block", chosen by the client's own aim. Sent
 /// reliably, so unlike per-tick inputs it is never guessed, dropped or skipped
 #[derive(Serialize, Deserialize, Clone, Debug)]

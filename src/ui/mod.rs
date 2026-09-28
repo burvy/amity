@@ -34,6 +34,8 @@ impl Plugin for UiPlugin {
             Update,
             (pause::escape, pause::click_menu, pause::show_menu, help::scroll_help).chain(),
         );
+        #[cfg(target_family = "wasm")]
+        app.add_systems(Update, pause::pause_when_mouse_released);
         app.add_systems(Update, (debug::toggle_debug, debug::update_debug).chain());
         app.add_systems(
             Update,

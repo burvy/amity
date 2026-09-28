@@ -13,7 +13,7 @@ use lightyear::prelude::{Controlled, MessageSender};
 
 use super::config::*;
 use crate::{
-    player::{config::BUTTON_PRIMARY, definition::PlayerInfo},
+    player::definition::PlayerInfo,
     world::meshing::{material::BlockAtlas, textures::item_tile},
 };
 
@@ -120,7 +120,7 @@ pub fn click_picker(
             color.0 = wanted;
         }
     }
-    if !info.menu_open || !mouse.just_pressed(BUTTON_PRIMARY) {
+    if !info.menu_open || !mouse.just_pressed(MouseButton::Left) {
         return;
     }
     let hovered = items

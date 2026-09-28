@@ -45,6 +45,8 @@ impl Plugin for WorldProtocolPlugin {
         .add_direction(NetworkDirection::ClientToServer);
         app.register_message::<messages::EditBlock>()
             .add_direction(NetworkDirection::ClientToServer);
+        app.register_message::<messages::SetViewDistance>()
+            .add_direction(NetworkDirection::ClientToServer);
 
         app.add_message::<blocks::BlockSet>();
         app.init_resource::<chunk::ChunkIndex>();

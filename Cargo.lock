@@ -242,6 +242,8 @@ dependencies = [
  "log",
  "png",
  "pulldown-cmark",
+ "ron",
+ "serde",
  "tracing",
  "web-sys",
 ]

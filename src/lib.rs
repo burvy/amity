@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 mod net;
 mod player;
+mod settings;
 mod sky;
 mod stuff;
 pub(crate) mod ui;
@@ -35,6 +36,7 @@ pub struct MainPlugin;
 
 impl Plugin for MainPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(settings::SettingsPlugin);
         app.add_plugins(player::PlayerPlugin);
         app.add_plugins(sky::SkyPlugin);
         app.add_plugins(stuff::StuffPlugin);

@@ -10,7 +10,7 @@
 
 use bevy::{post_process::auto_exposure::AutoExposurePlugin, prelude::*};
 
-mod config;
+pub(crate) mod config;
 pub(crate) mod logic;
 
 pub struct SkyPlugin;

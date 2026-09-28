@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
-/// How far players see, in chunks from the one they stand in (x, y, z). One
-/// chunk is 16 m. The outermost ring is loaded but not drawn, since drawing a
+/// The farthest players can see, in chunks from the one they stand in (x, y, z).
+/// Their render distance setting can bring x and z closer. One chunk is 16 m. The outermost ring is loaded but not drawn, since drawing a
 /// chunk needs all its neighbours
 pub const VIEW_DISTANCE: IVec3 = IVec3::new(8, 4, 8);
 

@@ -158,6 +158,35 @@ pub fn escape(
     }
 }
 
+/// On the web, the browser keeps Esc for itself while it has the mouse locked:
+/// it releases the mouse, and the game may never see the key. So when the game
+/// thinks it's playing but the browser no longer has the mouse locked, pause as
+/// if Esc was pressed. (Right after resuming, the browser takes a moment to lock
+/// it; that's allowed for.)
+#[cfg(target_family = "wasm")]
+pub fn pause_when_mouse_released(
+    mut info: ResMut<PlayerInfo>,
+    mut page: ResMut<PausePage>,
+    mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    time: Res<Time<Real>>,
+    mut playing_since: Local<Option<f32>>,
+) {
+    /// seconds the browser gets to lock the mouse after resuming
+    const LOCK_GRACE_SECS: f32 = 0.5;
+    if info.paused || info.menu_open {
+        *playing_since = None;
+        return;
+    }
+    let now = time.elapsed_secs();
+    let since = *playing_since.get_or_insert(now);
+    let locked = web_sys::window()
+        .and_then(|window| window.document())
+        .is_some_and(|document| document.pointer_lock_element().is_some());
+    if !locked && now - since > LOCK_GRACE_SECS {
+        pause(&mut info, &mut cursor, &mut page);
+    }
+}
+
 /// Clicking a choice; hovering one marks it with `>` and brightens it
 pub fn click_menu(
     mut buttons: Query<(&MenuButton, &Interaction, &mut Text, &mut TextColor)>,

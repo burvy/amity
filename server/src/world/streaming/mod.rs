@@ -12,5 +12,6 @@ impl Plugin for StreamingPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(logic::add_chunk_view);
         app.add_systems(FixedUpdate, logic::stream_chunks);
+        app.add_systems(Update, logic::receive_view_distance);
     }
 }

@@ -5,17 +5,16 @@ use amity_protocol::sky::{
 };
 use bevy::{
     core_pipeline::tonemapping::Tonemapping,
-    light::{
-        atmosphere::ScatteringMedium, Atmosphere, AtmosphereEnvironmentMapLight,
-        CascadeShadowConfigBuilder, SunDisk,
-    },
+    light::{atmosphere::ScatteringMedium, Atmosphere, SunDisk},
     pbr::AtmosphereSettings,
-    post_process::{auto_exposure::AutoExposure, bloom::Bloom},
     prelude::*,
 };
 
 use super::config::*;
-use crate::player::definition::MainPlayerCamera;
+use crate::{
+    player::definition::MainPlayerCamera,
+    settings::definition::{Settings, ShadowQuality},
+};
 
 /// Our copy of the world's time, advanced every frame so the sun moves smoothly,
 /// and pulled back in line whenever the server's `WorldClock` arrives
@@ -51,15 +50,9 @@ pub fn spawn_sky(mut cmds: Commands, mut media: ResMut<Assets<ScatteringMedium>>
             shadow_maps_enabled: true,
             ..default()
         },
-        // the sun's visible disk, at its real size and brightness
+        // the sun's visible disk, at its real size and brightness. Its shadow
+        // cascades come from the Shadows setting (`settings/apply.rs`)
         SunDisk::EARTH,
-        CascadeShadowConfigBuilder {
-            num_cascades: SHADOW_CASCADES,
-            first_cascade_far_bound: SHADOW_FIRST_CASCADE,
-            maximum_distance: SHADOW_DISTANCE,
-            ..default()
-        }
-        .build(),
     ));
     cmds.spawn((
         Moon,
@@ -74,25 +67,12 @@ pub fn spawn_sky(mut cmds: Commands, mut media: ResMut<Assets<ScatteringMedium>>
 }
 
 /// Turns the player's camera into a physically based one: the atmosphere drawn
-/// as its sky and lighting the scene (ambient light and reflections from the
-/// sky's colour), eyes that adapt to brightness, a filmic response curve, and a
-/// glow around bright lights like the sun
+/// as its sky, and a filmic response curve. The sky's lighting of the world,
+/// eyes that adapt to brightness, and bloom depend on the graphics settings, so
+/// `settings/apply.rs` adds those
 pub fn setup_camera(camera: On<Add, MainPlayerCamera>, mut cmds: Commands) {
-    cmds.entity(camera.entity).insert((
-        AtmosphereSettings::default(),
-        AtmosphereEnvironmentMapLight {
-            size: UVec2::splat(SKY_LIGHT_RESOLUTION),
-            ..default()
-        },
-        AutoExposure {
-            range: EXPOSURE_RANGE,
-            speed_brighten: EXPOSURE_BRIGHTEN_SPEED,
-            speed_darken: EXPOSURE_DARKEN_SPEED,
-            ..default()
-        },
-        Tonemapping::AgX,
-        Bloom::NATURAL,
-    ));
+    cmds.entity(camera.entity)
+        .insert((AtmosphereSettings::default(), Tonemapping::AgX));
 }
 
 /// Advances our time, and snaps to the server's whenever it arrives. Its updates
@@ -113,6 +93,7 @@ pub fn update_time(
 /// moon's brightness from its phase
 pub fn move_lights(
     time: Res<SkyTime>,
+    settings: Res<Settings>,
     mut sun: Single<(&mut Transform, &mut DirectionalLight), (With<Sun>, Without<Moon>)>,
     mut moon: Single<(&mut Transform, &mut DirectionalLight), (With<Moon>, Without<Sun>)>,
 ) {
@@ -126,8 +107,9 @@ pub fn move_lights(
     // below the horizon the planet blocks it (the atmosphere handles that), and
     // shadows cast from underneath the world would only cost time
     let sun_up = to_sun.y > -0.05;
-    if sun_light.shadow_maps_enabled != sun_up {
-        sun_light.shadow_maps_enabled = sun_up;
+    let shadows = sun_up && settings.graphics.shadows != ShadowQuality::Off;
+    if sun_light.shadow_maps_enabled != shadows {
+        sun_light.shadow_maps_enabled = shadows;
     }
 
     let (moon_transform, moon_light) = &mut *moon;

@@ -33,7 +33,9 @@ bevy = { version = "0.19", default-features = false, features = [
     "3d",
     "ui_bevy_render",
     "bevy_text",
-    "default_font"
+    "default_font",
+    # key and mouse button bindings are saved in the settings file
+    "serialize",
 ]}
 lightyear = { version = "0.28.0", default-features = false, features = [
     "std",
@@ -59,6 +61,9 @@ tracing = { version = "0.1", features = [
 getrandom = "0.4.3"
 # the Help screen: parses assets/help.md (just the parser, no HTML output)
 pulldown-cmark = { version = "0.13", default-features = false }
+# the settings file's format (settings.ron)
+ron = "0.12"
+serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.4.3", features = ["wasm_js"] }
@@ -67,8 +72,9 @@ getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 # WebGPU instead of WebGL2 on the web: the sky's atmosphere and auto-exposure run
 # compute shaders, which WebGL2 doesn't have. Browsers without WebGPU can't run it
 bevy = { version = "0.19", default-features = false, features = ["webgpu"] }
-# the pause menu's Leave: goes back to the site's front page
-web-sys = { version = "0.3", features = ["Window", "Location"] }
+# the pause menu's Leave (site front page), settings (browser storage), and
+# noticing the browser releasing the mouse (Esc)
+web-sys = { version = "0.3", features = ["Window", "Location", "Storage", "Document", "Element"] }
 
 [build-dependencies]
 # build.rs packs assets/images/blocks/*.png into the block texture atlas

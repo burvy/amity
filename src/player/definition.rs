@@ -2,7 +2,7 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
 
-use super::config::SENSITIVITY;
+use super::config::BASE_SENSITIVITY;
 use crate::ui::font::UiFont;
 
 /// Resource to store client-side player info
@@ -19,11 +19,13 @@ pub struct PlayerInfo {
 }
 
 impl PlayerInfo {
-    /// Updates the current yaw and pitch based on mouse motion
-    /// accumulation
-    pub fn update_look(&mut self, accumulation: Vec2) {
-        self.look.x -= accumulation.x * SENSITIVITY;
-        self.look.y -= accumulation.y * SENSITIVITY;
+    /// Updates the current yaw and pitch based on mouse motion accumulation,
+    /// at the player's `sensitivity` (1.0 = default), up and down swapped if
+    /// `invert_y`
+    pub fn update_look(&mut self, accumulation: Vec2, sensitivity: f32, invert_y: bool) {
+        let turn = accumulation * BASE_SENSITIVITY * sensitivity;
+        self.look.x -= turn.x;
+        self.look.y -= if invert_y { -turn.y } else { turn.y };
         self.look.y = self.look.y.clamp(-FRAC_PI_2, FRAC_PI_2);
     }
 }

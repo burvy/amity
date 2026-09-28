@@ -23,7 +23,8 @@ use lightyear::prelude::{client::Client, Controlled, Link};
 
 use super::{config::*, font::UiFont};
 use crate::{
-    player::{config::KEY_DEBUG, definition::PlayerInfo},
+    player::definition::PlayerInfo,
+    settings::{definition::Action, input::ActionInput},
     sky::logic::SkyTime,
     world::{chunks::IncomingChunks, meshing::tasks::MeshTask},
 };
@@ -58,11 +59,8 @@ pub fn spawn_debug(mut cmds: Commands, font: Res<UiFont>) {
 }
 
 /// F3 shows and hides it
-pub fn toggle_debug(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut text: Single<&mut Visibility, With<DebugText>>,
-) {
-    if keys.just_pressed(KEY_DEBUG) {
+pub fn toggle_debug(input: ActionInput, mut text: Single<&mut Visibility, With<DebugText>>) {
+    if input.just_pressed(Action::Debug) {
         **text = match **text {
             Visibility::Hidden => Visibility::Inherited,
             _ => Visibility::Hidden,

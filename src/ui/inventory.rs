@@ -21,10 +21,8 @@ use lightyear::prelude::{Controlled, MessageSender};
 
 use super::{config::*, font::UiFont};
 use crate::{
-    player::{
-        config::{BUTTON_PRIMARY, BUTTON_SECONDARY, KEY_INVENTORY},
-        definition::PlayerInfo,
-    },
+    player::definition::PlayerInfo,
+    settings::{definition::Action, input::ActionInput},
     world::meshing::{material::BlockAtlas, textures::item_tile},
 };
 
@@ -282,12 +280,12 @@ pub fn spawn_inventory(
 /// mouse is freed while it's open, and on closing, the server puts whatever was
 /// on the cursor back into the slots
 pub fn open_inventory(
-    keys: Res<ButtonInput<KeyCode>>,
+    input: ActionInput,
     mut info: ResMut<PlayerInfo>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     mut sender: Single<&mut MessageSender<InventoryAction>>,
 ) {
-    let open = keys.pressed(KEY_INVENTORY) && !info.paused;
+    let open = input.pressed(Action::Inventory) && !info.paused;
     if open == info.menu_open {
         return;
     }
@@ -333,9 +331,10 @@ pub fn click_slots(
     if !info.menu_open {
         return;
     }
-    let click = if mouse.just_pressed(BUTTON_PRIMARY) {
+    // UI clicks are always the physical left and right buttons
+    let click = if mouse.just_pressed(MouseButton::Left) {
         Click::Left
-    } else if mouse.just_pressed(BUTTON_SECONDARY) {
+    } else if mouse.just_pressed(MouseButton::Right) {
         Click::Right
     } else {
         return;
