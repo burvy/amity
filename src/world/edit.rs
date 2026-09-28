@@ -21,8 +21,8 @@ use super::{chunks::IncomingChunks, sky::Skies};
 /// Reads this tick's inputs (empty while paused), and runs per tick, so holding a
 /// button edits at the tick rate whatever the FPS.
 ///
-/// - Breaking: every tick the button is held, so dragging across blocks breaks
-///   them all. Until the answer arrives the same break is re-sent each tick; the
+/// - Breaking: a cube of blocks around the aimed face (`edit::break_cube`),
+///   every tick the button is held, so dragging across blocks breaks them all. Until the answer arrives the same break is re-sent each tick; the
 ///   server rejects the duplicates harmlessly
 /// - Placing: one block per click. Holding sprint (Shift) as well places every
 ///   tick, for building walls and bridges quickly
@@ -53,12 +53,12 @@ pub fn request_edits(
     } else {
         return;
     };
-    let Some((pos, block)) =
+    let Some(edit) =
         player_edit(edit_action, place, player, position.0, input.look, &spatial, &blocks)
     else {
         return;
     };
-    sender.send::<EditChannel>(EditBlock { pos, block });
+    sender.send::<EditChannel>(edit);
 }
 
 /// Block changes for chunks that haven't arrived yet, by chunk position, oldest

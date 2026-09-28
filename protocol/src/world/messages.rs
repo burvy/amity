@@ -55,10 +55,13 @@ pub struct SetViewDistance {
     pub chunks: u8,
 }
 
-/// Client -> server: "set this block", chosen by the client's own aim. Sent
+/// Client -> server: a block edit, chosen by the client's own aim. Sent
 /// reliably, so unlike per-tick inputs it is never guessed, dropped or skipped
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EditBlock {
-    pub pos: IVec3,
-    pub block: Block,
+pub enum EditBlock {
+    /// Break the solid blocks in the cube with this lowest corner (see
+    /// `edit::break_cube`)
+    Break { corner: IVec3 },
+    /// Put `block` at `pos`
+    Place { pos: IVec3, block: Block },
 }

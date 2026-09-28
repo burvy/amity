@@ -4,9 +4,9 @@
 use crate::world::config::BLOCK_SIZE;
 
 /// Walking speed (metres per second)
-pub const WALK_SPEED: f32 = 1.5;
+pub const WALK_SPEED: f32 = 1.8;
 /// Running speed while sprint is held (metres per second)
-pub const RUN_SPEED: f32 = 8.0;
+pub const RUN_SPEED: f32 = 6.0;
 
 /// How fast a player on the ground speeds up to, or slows down from, the speed
 /// they want (metres per second, per second)

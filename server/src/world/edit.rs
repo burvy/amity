@@ -12,7 +12,7 @@ use amity_protocol::{
         block::Block,
         blocks::Blocks,
         chunk::ChunkPos,
-        edit::edit_allowed,
+        edit::{break_cube, edit_allowed},
         messages::{BlockChanged, BlockChannel, EditBlock},
     },
 };
@@ -68,34 +68,51 @@ pub fn receive_edits(
         // the selected hotbar slot (the client can't pick one past the hotbar)
         let slot = (action.0.slot as usize).min(HOTBAR_SLOTS - 1);
         for edit in receiver.receive() {
-            let before = blocks.get(edit.pos);
             // placing: the selected item must place this block
-            let holding = edit.block == Block::AIR
-                || inventory
+            let holding = match edit {
+                EditBlock::Break { .. } => true,
+                EditBlock::Place { block, .. } => inventory
                     .get(slot)
-                    .is_some_and(|stack| stack.item.places() == Some(edit.block));
-            if holding && edit_allowed(&edit, eye, &spatial, &blocks) {
+                    .is_some_and(|stack| stack.item.places() == Some(block)),
+            };
+            let allowed = holding && edit_allowed(&edit, eye, &spatial, &blocks);
+            // the blocks this edit touches, and what each becomes
+            let changes: Vec<(IVec3, Block)> = match edit {
+                EditBlock::Break { corner } => break_cube(corner)
+                    .filter(|&pos| blocks.get(pos).is_some_and(Block::is_solid))
+                    .map(|pos| (pos, Block::AIR))
+                    .collect(),
+                EditBlock::Place { pos, block } => vec![(pos, block)],
+            };
+            if !allowed {
+                // send back what's really there, correcting the client's view
+                for (pos, _) in changes {
+                    if let Some(actual) = blocks.get(pos) {
+                        sender.send::<BlockChannel>(BlockChanged {
+                            pos,
+                            block: actual,
+                            sky: None,
+                        });
+                    }
+                }
+                continue;
+            }
+            for (pos, block) in changes {
                 if survival {
-                    if edit.block == Block::AIR {
+                    if block == Block::AIR {
                         // what was broken goes in the inventory, if there's room
-                        if let Some(item) = before.and_then(Item::of_block) {
+                        if let Some(item) = blocks.get(pos).and_then(Item::of_block) {
                             inventory.add(item, 1);
                         }
                     } else {
                         inventory.take_one(slot);
                     }
                 }
-                blocks.set(edit.pos, edit.block);
+                blocks.set(pos, block);
                 accepted.push(BlockChanged {
-                    pos: edit.pos,
-                    block: edit.block,
-                    sky: sky.edited(edit.pos, edit.block, &blocks),
-                });
-            } else if let Some(actual) = blocks.get(edit.pos) {
-                sender.send::<BlockChannel>(BlockChanged {
-                    pos: edit.pos,
-                    block: actual,
-                    sky: None,
+                    pos,
+                    block,
+                    sky: sky.edited(pos, block, &blocks),
                 });
             }
         }

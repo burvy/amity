@@ -9,3 +9,6 @@ pub const REACH: f32 = 5.0;
 /// Extra distance the server allows when checking an edit: the aimed point can be
 /// up to ~0.87 from the block's center, plus the player may have moved since
 pub const REACH_TOLERANCE: f32 = 0.5;
+
+/// Breaking clears a cube this many blocks along each edge (see `edit.rs`)
+pub const BREAK_SIZE: i32 = 2;
