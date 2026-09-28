@@ -58,7 +58,10 @@ pub fn spawn_debug(mut cmds: Commands, font: Res<UiFont>) {
 }
 
 /// F3 shows and hides it
-pub fn toggle_debug(keys: Res<ButtonInput<KeyCode>>, mut text: Single<&mut Visibility, With<DebugText>>) {
+pub fn toggle_debug(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut text: Single<&mut Visibility, With<DebugText>>,
+) {
     if keys.just_pressed(KEY_DEBUG) {
         **text = match **text {
             Visibility::Hidden => Visibility::Inherited,
@@ -73,7 +76,9 @@ pub fn update_debug(
     mut next: Local<f32>,
     diagnostics: Res<DiagnosticsStore>,
     info: Res<PlayerInfo>,
-    player: Option<Single<(Entity, &Position, Option<&GameMode>, Option<&Flying>), With<Controlled>>>,
+    player: Option<
+        Single<(Entity, &Position, Option<&GameMode>, Option<&Flying>), With<Controlled>>,
+    >,
     spatial: SpatialQuery,
     index: Res<ChunkIndex>,
     chunks: Query<&Chunk>,
@@ -93,7 +98,10 @@ pub fn update_debug(
         .get(&FrameTimeDiagnosticsPlugin::FPS)
         .and_then(|fps| fps.smoothed())
         .unwrap_or(0.0);
-    lines.push(format!("Amity  {fps:.0} fps ({:.1} ms)", 1000.0 / fps.max(1.0)));
+    lines.push(format!(
+        "Amity  {fps:.0} fps ({:.1} ms)",
+        1000.0 / fps.max(1.0)
+    ));
 
     if let Some(player) = player {
         let (entity, position, mode, flying) = player.into_inner();
@@ -101,9 +109,12 @@ pub fn update_debug(
         let block = block_at(p);
         let chunk = ChunkPos::of_block(block).0;
         lines.push(format!("XYZ {:.1} / {:.1} / {:.1} m", p.x, p.y, p.z));
-        lines.push(format!("Block {} {} {}   Chunk {} {} {}", block.x, block.y, block.z, chunk.0.x, chunk.0.y, chunk.0.z));
         lines.push(format!(
-            "Facing {}   yaw {:.0}°  pitch {:.0}°",
+            "Block {} {} {}   Chunk {} {} {}",
+            block.x, block.y, block.z, chunk.0.x, chunk.0.y, chunk.0.z
+        ));
+        lines.push(format!(
+            "Facing {}   yaw {:.0} degrees  pitch {:.0} degrees",
             facing(info.look.x),
             info.look.x.to_degrees().rem_euclid(360.0),
             info.look.y.to_degrees()
@@ -120,7 +131,10 @@ pub fn update_debug(
                     .get(chunk)
                     .and_then(|entity| chunks.get(entity).ok())
                     .map(|chunk| chunk.get(local));
-                format!("Looking at {block:?} at {} {} {}", target.x, target.y, target.z)
+                format!(
+                    "Looking at {block:?} at {} {} {}",
+                    target.x, target.y, target.z
+                )
             }
             None => "Looking at nothing".into(),
         });
@@ -130,7 +144,11 @@ pub fn update_debug(
             Some(GameMode::Survival) => "survival",
             None => "?",
         };
-        let flying = if flying.is_some_and(|flying| flying.0) { ", flying" } else { "" };
+        let flying = if flying.is_some_and(|flying| flying.0) {
+            ", flying"
+        } else {
+            ""
+        };
         lines.push(format!("Mode {mode}{flying}"));
     }
 
@@ -141,7 +159,10 @@ pub fn update_debug(
         meshing.iter().count()
     ));
     if let Some(link) = link {
-        lines.push(format!("Ping {:.0} ms", link.stats.rtt.as_secs_f64() * 1000.0));
+        lines.push(format!(
+            "Ping {:.0} ms",
+            link.stats.rtt.as_secs_f64() * 1000.0
+        ));
     }
 
     if let Some(days) = sky.days() {
@@ -151,7 +172,7 @@ pub fn update_debug(
         let phase = moon_phase(days);
         let waxing = if phase < 0.5 { "waxing" } else { "waning" };
         lines.push(format!(
-            "Day {day_of_year} ({}), {:02}:{:02}   sun {sun:.0}° up",
+            "Day {day_of_year} ({}), {:02}:{:02}   sun {sun:.0} degrees up",
             season(day_of_year),
             minutes / 60,
             minutes % 60
@@ -171,7 +192,14 @@ pub fn update_debug(
 /// The compass direction of a yaw (radians, 0 looking along -Z, which is north)
 fn facing(yaw: f32) -> &'static str {
     const NAMES: [&str; 8] = [
-        "north", "north-west", "west", "south-west", "south", "south-east", "east", "north-east",
+        "north",
+        "north-west",
+        "west",
+        "south-west",
+        "south",
+        "south-east",
+        "east",
+        "north-east",
     ];
     // yaw grows turning left (towards west)
     let eighth = ((yaw as f64).rem_euclid(TAU) / TAU * 8.0).round() as usize % 8;

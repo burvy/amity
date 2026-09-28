@@ -24,21 +24,9 @@ impl Plugin for PlayerPlugin {
             (definition::spawn_camera, definition::spawn_interact_prompt),
         );
 
-        let grab_on_click = input::grab_on_click;
-        // stop clicking egui from unpausing the game
-        // TODO: possibly better to make a new window
-        #[cfg(feature = "dev-local")]
-        let grab_on_click = grab_on_click.run_if(
-            |wants: Res<bevy_inspector_egui::bevy_egui::input::EguiWantsInput>| {
-                !wants.wants_pointer_input()
-            },
-        );
-
         app.add_systems(
             Update,
             (
-                grab_on_click,
-                input::pause_on_esc,
                 input::select_slot,
                 input::toggle_flight,
                 (input::rotate_player_resource, logic::camera_follow_player).chain(),

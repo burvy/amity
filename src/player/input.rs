@@ -1,4 +1,5 @@
-//! Mouse and keyboard: pausing, looking, and the inputs sent to the server
+//! Mouse and keyboard: looking, and the inputs sent to the server. Pausing is
+//! the pause menu's (`ui/pause.rs`)
 
 use amity_protocol::{
     inventory::{
@@ -10,7 +11,6 @@ use amity_protocol::{
 use bevy::{
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
     prelude::*,
-    window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 use lightyear::prelude::{
     input::native::{ActionState, InputMarker},
@@ -18,32 +18,6 @@ use lightyear::prelude::{
 };
 
 use super::{config::*, definition::PlayerInfo};
-
-/// Unlock on escape
-pub fn pause_on_esc(
-    mut cursor_options: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    mut player_info: ResMut<PlayerInfo>,
-    key: Res<ButtonInput<KeyCode>>,
-) {
-    if key.just_pressed(KeyCode::Escape) && !player_info.paused {
-        player_info.paused = true;
-        cursor_options.grab_mode = CursorGrabMode::None;
-        cursor_options.visible = true;
-    }
-}
-
-/// Lock on left click
-pub fn grab_on_click(
-    mut cursor_options: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    mut player_info: ResMut<PlayerInfo>,
-    buttons: Res<ButtonInput<MouseButton>>,
-) {
-    if player_info.paused && !player_info.menu_open && buttons.just_pressed(MouseButton::Left) {
-        player_info.paused = false;
-        cursor_options.grab_mode = CursorGrabMode::Locked;
-        cursor_options.visible = false;
-    }
-}
 
 /// Stores the accumulated mouse motion in the PlayerInfo resource
 pub fn rotate_player_resource(

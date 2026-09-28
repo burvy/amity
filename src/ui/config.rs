@@ -39,3 +39,34 @@ pub const DEBUG_FONT_SIZE: f32 = 14.0;
 pub const DEBUG_MARGIN: f32 = 8.0;
 pub const DEBUG_PADDING: f32 = 6.0;
 pub const DEBUG_BACKGROUND: Color = Color::srgba(0.0, 0.0, 0.0, 0.5);
+
+/// Pause menu (Esc): a list down the left over the dimmed game, and a panel for
+/// Help and Settings beside it. The pixel font is sharp at multiples of 16 px
+pub const MENU_DIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.6);
+pub const MENU_MARGIN: f32 = 48.0;
+pub const MENU_LIST_WIDTH: f32 = 240.0;
+pub const MENU_PANEL_MAX_WIDTH: f32 = 900.0;
+pub const MENU_TITLE_SIZE: f32 = 32.0;
+pub const MENU_BUTTON_SIZE: f32 = 32.0;
+pub const MENU_BUTTON_GAP: f32 = 12.0;
+/// Text: normal, dim (unselected choices, list markers), headings
+pub const MENU_TEXT: Color = Color::srgb(0.95, 0.95, 0.95);
+pub const MENU_TEXT_DIM: Color = Color::srgb(0.6, 0.6, 0.6);
+pub const MENU_HEADING: Color = Color::srgb(1.0, 0.85, 0.45);
+/// The pixel font has no bold or italic faces, so those are coloured instead
+pub const MENU_BOLD: Color = Color::WHITE;
+pub const MENU_ITALIC: Color = Color::srgb(0.7, 0.85, 1.0);
+pub const MENU_CODE: Color = Color::srgb(0.75, 1.0, 0.7);
+pub const MENU_CODE_BACKGROUND: Color = Color::srgba(0.0, 0.0, 0.0, 0.4);
+pub const MENU_SCROLLBAR: Color = Color::srgba(1.0, 1.0, 1.0, 0.35);
+pub const MENU_SCROLLBAR_WIDTH: f32 = 4.0;
+
+/// Help page text
+pub const HELP_TEXT_SIZE: f32 = 16.0;
+pub const HELP_TITLE_SIZE: f32 = 32.0;
+/// Space between paragraphs, headings and so on
+pub const HELP_BLOCK_GAP: f32 = 12.0;
+/// How far list items are indented, per level
+pub const HELP_INDENT: f32 = 16.0;
+/// Pixels scrolled per step of the mouse wheel
+pub const HELP_SCROLL_SPEED: f32 = 48.0;

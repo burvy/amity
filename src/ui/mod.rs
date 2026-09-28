@@ -3,6 +3,8 @@
 //! - `config.rs`: sizes and colours (placeholder styling, meant to be redesigned)
 //! - `font.rs`: the one font all UI text uses (swap in your own there)
 //! - `debug.rs`: the debug screen (F3)
+//! - `pause.rs`: the pause menu (Esc)
+//! - `help.rs`: the Help page, from `assets/help.md`
 //! - `inventory.rs`: the hotbar down the right edge, the inventory that slides
 //!   out beside it while Tab is held, and the item held on the cursor
 //! - `picker.rs`: the creative block picker, beside the open inventory
@@ -14,7 +16,9 @@ use crate::world::meshing::material::BlockAtlas;
 mod config;
 mod debug;
 pub mod font;
+mod help;
 mod inventory;
+mod pause;
 mod picker;
 
 pub struct UiPlugin;
@@ -24,7 +28,12 @@ impl Plugin for UiPlugin {
         // the debug screen's frame rate
         app.add_plugins(FrameTimeDiagnosticsPlugin::default());
         app.init_resource::<font::UiFont>();
-        app.add_systems(Startup, debug::spawn_debug);
+        app.init_resource::<pause::PausePage>();
+        app.add_systems(Startup, (debug::spawn_debug, pause::spawn_pause_menu));
+        app.add_systems(
+            Update,
+            (pause::escape, pause::click_menu, pause::show_menu, help::scroll_help).chain(),
+        );
         app.add_systems(Update, (debug::toggle_debug, debug::update_debug).chain());
         app.add_systems(
             Update,
