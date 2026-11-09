@@ -1,3 +1,5 @@
+use std::f32::consts::{FRAC_PI_3, FRAC_PI_4};
+
 use bevy::math::Vec3;
 
 /// Mouse look speed at a sensitivity setting of 1.0: radians turned per pixel
@@ -27,8 +29,8 @@ pub const FLASHLIGHT_LUMENS: f32 = 1.0e7;
 /// How far the beam reaches (metres)
 pub const FLASHLIGHT_RANGE: f32 = 40.0;
 /// The beam's edge and its bright middle, as angles from its centre (radians)
-pub const FLASHLIGHT_OUTER_ANGLE: f32 = 0.35;
-pub const FLASHLIGHT_INNER_ANGLE: f32 = 0.2;
+pub const FLASHLIGHT_OUTER_ANGLE: f32 = FRAC_PI_3;
+pub const FLASHLIGHT_INNER_ANGLE: f32 = FRAC_PI_4;
 /// Where the flashlight is held, from the eye (right, up, forward in metres):
 /// a little off to the side, so its shadows aren't hidden behind what they fall
 /// from

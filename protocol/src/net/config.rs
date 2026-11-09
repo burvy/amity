@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 /// Shared physics timestep between server and client
-pub const TIMESTEP: f64 = 1.0 / 64.0;
+pub const TIMESTEP: f64 = 1.0 / 20.0;
 
 /// It is best to fix a specific server IP and port, so the clients know who
 /// to connect to. For clients, using port 0 allows the computer to choose a
